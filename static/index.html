@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HR智能体 Demo</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div id="loginView" class="login-shell">
+    <section class="login-card">
+      <div class="brand-row">
+        <div class="brand-mark">HR</div>
+        <div>
+          <h1>HR智能体</h1>
+          <p>员工关系智能体 Demo · Windows 本地运行</p>
+        </div>
+      </div>
+      <label>账号</label>
+      <input id="username" value="employee01" autocomplete="username" />
+      <label>密码</label>
+      <input id="password" value="123456" type="password" autocomplete="current-password" />
+      <button id="loginBtn" class="primary-btn">登录</button>
+      <div class="demo-accounts">
+        <strong>Demo账号</strong>
+        <span>员工：employee01 / 123456</span>
+        <span>主管：manager01 / 123456</span>
+        <span>HR：hr01 / 123456</span>
+        <span>管理员：admin / admin123</span>
+      </div>
+      <p id="loginError" class="error"></p>
+    </section>
+  </div>
+
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="side-title">
+        <div class="brand-mark small">HR</div>
+        <div>
+          <strong>HR智能体</strong>
+          <span id="roleLabel">员工端</span>
+        </div>
+      </div>
+      <nav id="nav"></nav>
+      <button id="logoutBtn" class="ghost-btn">退出登录</button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2 id="pageTitle">首页</h2>
+          <p id="pageSubtitle">员工关系智能体 Demo</p>
+        </div>
+        <div class="user-chip" id="userChip"></div>
+      </header>
+      <section id="content" class="content"></section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

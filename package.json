@@ -1,0 +1,43 @@
+{
+  "name": "hragent-electron-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron shell for HR Agent demo",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --win portable --x64"
+  },
+  "build": {
+    "appId": "com.demo.hragent",
+    "productName": "HR智能体",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "app.py",
+      "static/**/*",
+      "knowledge_base/**/*",
+      "data/**/*",
+      "generated_docs/**/*",
+      "templates/**/*",
+      "runtime/**/*",
+      "README.md"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  }
+}

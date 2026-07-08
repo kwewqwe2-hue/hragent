@@ -1,0 +1,20 @@
+node_modules/
+dist/
+release/
+runtime/
+generated_docs/
+__pycache__/
+*.pyc
+*.log
+
+# Local demo runtime data
+data/*.sqlite3
+data/config.json
+
+# Packaged Electron runtime files should not be committed.
+*.exe
+*.dll
+*.pak
+*.bin
+locales/
+resources/
