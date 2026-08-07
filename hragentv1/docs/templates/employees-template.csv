@@ -1,0 +1,3 @@
+userId,employeeNo,name,role,phone,email,department,title,managerEmployeeNo,entryDate,status
+,E002,Alice Chen,EMPLOYEE,13800000004,alice@example.com,R&D Center,Java Engineer,M001,2026-01-15,ACTIVE
+,E003,Bob Liu,MANAGER,13800000005,bob@example.com,Operations,Engineering Manager,,2026-02-20,ACTIVE

@@ -1,20 +1,35 @@
-node_modules/
-dist/
-release/
-runtime/
-generated_docs/
-__pycache__/
-*.pyc
+# Local configuration and credentials
+**/.env
+**/.env.*
+!**/.env.example
+**/saas-agent.env
+!**/saas-agent.env.example
+
+# Build output and dependencies
+**/target/
+**/node_modules/
+**/dist/
+**/.vite/
+**/__pycache__/
+**/*.py[cod]
+
+# Runtime data
+n8nwork/knowledge-files/*
+!n8nwork/knowledge-files/README.md
+**/data/certificates/
+**/uploads/
 *.log
 
-# Local demo runtime data
-data/*.sqlite3
-data/config.json
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# Packaged Electron runtime files should not be committed.
-*.exe
-*.dll
-*.pak
-*.bin
-locales/
-resources/
+# Local backups and temporary files
+**/backups/
+**/.backups/
+**/tmp/
+*.bak
+*.local

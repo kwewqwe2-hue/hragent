@@ -1,0 +1,200 @@
+{
+  "name": "HRAgent-07-DingTalk-Leave-Card-Action",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "hragent-dingtalk-leave-card-action",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d7c5b2b4-94f4-4c20-8b3a-0b1e4f2b6d10",
+      "name": "Approval Card Click",
+      "webhookId": "d7c5b2b4-94f4-4c20-8b3a-0b1e4f2b6d10"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "hragent-dingtalk-leave-card",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "id": "0ea93e80-ef2b-47b5-9460-3b78c7be3e5d",
+      "name": "Approval Card Open",
+      "webhookId": "0ea93e80-ef2b-47b5-9460-3b78c7be3e5d"
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $('Approval Card Open').first().json.query ?? {};\nconst approveToken = encodeURIComponent(query.approveToken || '');\nconst rejectToken = encodeURIComponent(query.rejectToken || '');\nconst actionPath = '/webhook/hragent-dingtalk-leave-card-action?token=';\nconst actions = approveToken && rejectToken\n  ? `<div class=\"actions\"><a class=\"approve\" href=\"${actionPath}${approveToken}\">同意</a><a class=\"reject\" href=\"${actionPath}${rejectToken}\">拒绝</a></div>`\n  : '<p class=\"error\">审批卡片参数无效，请返回钉钉重新打开最新卡片。</p>';\nconst html = `<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>请假审批</title><style>body{margin:0;background:#f4f6f8;color:#17202a;font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.page{min-height:100vh;display:grid;place-items:center;padding:24px;box-sizing:border-box}.panel{width:min(420px,100%);background:#fff;border:1px solid #dfe4e8;border-radius:8px;padding:28px;box-sizing:border-box;box-shadow:0 8px 24px rgba(24,39,75,.08)}h1{margin:0 0 10px;font-size:22px}p{margin:0;color:#5f6b76;line-height:1.6}.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}a{display:flex;align-items:center;justify-content:center;min-height:44px;border-radius:6px;text-decoration:none;font-weight:600}.approve{background:#1677ff;color:#fff}.reject{border:1px solid #d5d9de;color:#b42318;background:#fff}.error{margin-top:20px;color:#b42318}</style></head><body><main class=\"page\"><section class=\"panel\"><h1>请假审批</h1><p>请选择本次申请的处理结果。提交后将以 SaaS 中的最新状态为准。</p>${actions}</section></main></body></html>`;\nreturn [{ json: { html } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        300
+      ],
+      "id": "e486a9ad-8f87-4c2e-ae40-dfc12153c965",
+      "name": "Build Approval Page"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        560,
+        300
+      ],
+      "id": "f9387d2f-15f2-4480-b693-2e445ca93dc7",
+      "name": "Return Approval Page"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/leave/card-action' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({token: $('Approval Card Click').first().json.query?.token || ''}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        280,
+        0
+      ],
+      "id": "4b5c6d7e-8f90-4a1b-2c3d-4e5f6a7b8c90",
+      "name": "Process SaaS Card Action"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json ?? {};\nconst result = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst data = result.data && typeof result.data === 'object' ? result.data : {};\nconst success = result.success === true;\nconst status = data.statusLabel || data.status || '';\nreturn [{ json: { success, requestId: data.id ?? null, status, message: success ? (data.alreadyProcessed ? `该申请已经处理过，当前状态：${status}` : `处理成功，当前状态：${status}`) : (result.message || '审批卡片处理失败，请在 SaaS 中查看申请状态') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ],
+      "id": "5c6d7e8f-901a-4b2c-3d4e-5f6a7b8c9d01",
+      "name": "Build Card Result"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [
+        840,
+        0
+      ],
+      "id": "6d7e8f90-1a2b-4c3d-5e6f-7a8b9c0d1e2f",
+      "name": "Return Card Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Approval Card Click": {
+      "main": [
+        [
+          {
+            "node": "Process SaaS Card Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Card Open": {
+      "main": [
+        [
+          {
+            "node": "Build Approval Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Approval Page": {
+      "main": [
+        [
+          {
+            "node": "Return Approval Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process SaaS Card Action": {
+      "main": [
+        [
+          {
+            "node": "Build Card Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Card Result": {
+      "main": [
+        [
+          {
+            "node": "Return Card Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Shanghai",
+    "errorWorkflow": "e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17"
+  },
+  "versionId": "7e8f901a-2b3c-4d5e-6f7a-8b9c0d1e2f30",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "c8d9e0f1-2a3b-4c5d-6e7f-8a9b0c1d2e3f",
+  "tags": []
+}

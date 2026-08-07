@@ -1,0 +1,193 @@
+{
+  "id": "9f6f1e91-1d0e-4f5c-8fb5-7c2f4f3d9a01",
+  "name": "HRAgent-RAG-Admin",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hragent-knowledge-delete",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d4b5e6f7-8091-4a2b-9c3d-4e5f60718293",
+      "name": "Knowledge Delete Webhook",
+      "webhookId": "a8b9c0d1-e2f3-4567-8901-2a3b4c5d6e7f"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $json.body || $json;\nconst fileName = String(body.fileName || '').trim();\nif (!fileName) throw new Error('fileName is required');\nif (fileName.includes('/') || fileName.includes('\\\\') || fileName.includes('..') || fileName.includes('\\\\0')) {\n  throw new Error('fileName must be a single file name');\n}\nreturn [{ json: { fileName, filePath: '/knowledge-files/' + fileName, collection: 'hragent_knowledge' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "id": "e5f60718-293a-4b5c-8d6e-7f8091a2b3c4",
+      "name": "Normalize Delete Request"
+    },
+    {
+      "parameters": {
+        "url": "=http://qdrant:6333/collections/{{ $json.collection }}/points/scroll",
+        "method": "POST",
+        "options": {},
+        "jsonBody": "={\n    \"filter\": {\n        \"must\": [\n            {\n                \"key\": \"metadata.filter_by_filename\",\n                \"match\": {\n                    \"value\": \"{{ $json.filePath }}\"\n                }\n            }\n        ]\n    },\n    \"limit\": 1000,\n    \"with_payload\": false,\n    \"with_vector\": false\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "qdrantApi"
+      },
+      "credentials": {
+        "qdrantApi": {
+          "id": "ChDPz6xXj1Fal8N9",
+          "name": "Qdrant account"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ],
+      "id": "f6071829-3a4b-5c6d-8e7f-8091a2b3c4d5",
+      "name": "Find Knowledge Vectors"
+    },
+    {
+      "parameters": {
+        "url": "=http://qdrant:6333/collections/{{ $('Normalize Delete Request').first().json.collection }}/points/delete",
+        "method": "POST",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"filter\": {\n        \"must\": [\n            {\n                \"key\": \"metadata.filter_by_filename\",\n                \"match\": {\n                    \"value\": \"{{ $('Normalize Delete Request').first().json.filePath }}\"\n                }\n            }\n        ]\n    }\n}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "qdrantApi"
+      },
+      "credentials": {
+        "qdrantApi": {
+          "id": "ChDPz6xXj1Fal8N9",
+          "name": "Qdrant account"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        0
+      ],
+      "id": "0718293a-4b5c-6d7e-8f90-1a2b3c4d5e6f",
+      "name": "Delete Knowledge Vectors"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const request = $('Normalize Delete Request').first().json;\nconst found = $('Find Knowledge Vectors').first().json.result?.points || [];\nreturn [{ json: { success: true, fileName: request.fileName, deletedPoints: found.length, deletedSourceFile: true, message: 'Knowledge vectors and source file deleted' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ],
+      "id": "18293a4b-5c6d-7e8f-901a-2b3c4d5e6f70",
+      "name": "Delete Result"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://pdf-parser:3000/delete",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ fileName: $('Normalize Delete Request').first().json.fileName }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "293a4b5c-6d7e-8f90-1a2b-3c4d5e6f7081",
+      "name": "Delete Knowledge Source File"
+    }
+  ],
+  "connections": {
+    "Knowledge Delete Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Delete Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Delete Request": {
+      "main": [
+        [
+          {
+            "node": "Find Knowledge Vectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Knowledge Vectors": {
+      "main": [
+        [
+          {
+            "node": "Delete Knowledge Vectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Knowledge Vectors": {
+      "main": [
+        [
+          {
+            "node": "Delete Knowledge Source File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Knowledge Source File": {
+      "main": [
+        [
+          {
+            "node": "Delete Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17"
+  },
+  "staticData": null,
+  "pinData": {},
+  "tags": []
+}

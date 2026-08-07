@@ -1,0 +1,95 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: hragent-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-hragent}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hragent}
+      MYSQL_USER: ${MYSQL_USER:-hragent}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-hragent}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: hragent-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: hragent-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hragent}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-hragent}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-hragent}
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-local-demo-secret-change-me}
+      APP_WEB_CHAT_IDENTITY_SECRET: ${HRAGENT_WEB_CHAT_IDENTITY_SECRET:-local-demo-web-chat-identity-secret}
+      N8N_WEB_CHAT_WEBHOOK_URL: ${N8N_WEB_CHAT_WEBHOOK_URL:-http://hragent-n8n:5678/webhook/hragent-dingtalk-8a2d811d-0fe5-4198-8e61-288ec417fc04}
+      N8N_WEB_ATTACHMENT_PARSE_URL: ${N8N_WEB_ATTACHMENT_PARSE_URL:-http://hragent-n8n:5678/webhook/hragent-web-attachment-parse}
+      WEB_ATTACHMENT_INTERNAL_KEY: ${HRAGENT_WEB_ATTACHMENT_INTERNAL_KEY:-local-demo-web-attachment-internal-key-change-me}
+      N8N_WEB_CHAT_CALLBACK_BASE_URL: ${N8N_WEB_CHAT_CALLBACK_BASE_URL:-http://hragent-backend:8080/api}
+      N8N_KNOWLEDGE_UPLOAD_URL: ${N8N_KNOWLEDGE_UPLOAD_URL:-http://hragent-n8n:5678/webhook/hragent-knowledge-ingest}
+      N8N_KNOWLEDGE_DELETE_URL: ${N8N_KNOWLEDGE_DELETE_URL:-http://hragent-n8n:5678/webhook/hragent-knowledge-delete}
+      CERTIFICATE_STORAGE_ROOT: /app/data/certificates
+      CERTIFICATE_COMPANY_ADDRESS: ${CERTIFICATE_COMPANY_ADDRESS:-北京市海淀区中关村示例科技园 1 号}
+      CERTIFICATE_COMPANY_CONTACT: ${CERTIFICATE_COMPANY_CONTACT:-010-88886666}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - certificate-files:/app/data/certificates
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - n8n
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: hragent-frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+  chat:
+    build:
+      context: ../hragent-chat
+    container_name: hragent-chat
+    depends_on:
+      - backend
+    ports:
+      - "5174:80"
+
+volumes:
+  mysql-data:
+  certificate-files:
+
+networks:
+  n8n:
+    external: true
+    name: n8nwork_default
