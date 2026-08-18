@@ -1,5 +1,7 @@
 # HRAgent 新人接手 10 分钟启动清单
 
+完整长版请看 `docs/HRAGENT_HANDOFF_LONG.md`。
+
 ## 先记住
 
 - `v2` 是可运行代码分支。
