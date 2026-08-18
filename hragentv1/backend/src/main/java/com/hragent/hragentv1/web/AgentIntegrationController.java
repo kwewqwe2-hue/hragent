@@ -3,6 +3,7 @@ package com.hragent.hragentv1.web;
 import com.hragent.hragentv1.dto.AgentIntegrationDtos;
 import com.hragent.hragentv1.dto.ApiResponse;
 import com.hragent.hragentv1.dto.EmploymentCertificateDtos;
+import com.hragent.hragentv1.dto.OnboardingDtos;
 import com.hragent.hragentv1.service.AgentIntegrationService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -143,6 +144,14 @@ public class AgentIntegrationController {
             @PathVariable Long id
     ) {
         return ApiResponse.ok(agentIntegrationService.requestStatus(apiKey, dingtalkUserId, id));
+    }
+
+    @GetMapping("/onboarding/requests")
+    public ApiResponse<List<OnboardingDtos.RequestView>> onboardingRequests(
+            @RequestHeader("X-API-Key") String apiKey,
+            @RequestHeader("X-DingTalk-User-Id") String dingtalkUserId
+    ) {
+        return ApiResponse.ok(agentIntegrationService.onboardingRequests(apiKey, dingtalkUserId));
     }
 
     @GetMapping("/notifications/pending")

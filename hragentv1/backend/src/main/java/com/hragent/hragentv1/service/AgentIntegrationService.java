@@ -10,6 +10,7 @@ import com.hragent.hragentv1.dto.AgentIntegrationDtos;
 import com.hragent.hragentv1.dto.EmployeePersonalProfileDtos;
 import com.hragent.hragentv1.dto.EmploymentCertificateDtos;
 import com.hragent.hragentv1.dto.LeaveDtos;
+import com.hragent.hragentv1.dto.OnboardingDtos;
 import com.hragent.hragentv1.repo.ApiCallLogRepository;
 import com.hragent.hragentv1.repo.AgentNotificationRepository;
 import com.hragent.hragentv1.repo.LeaveRequestRepository;
@@ -37,6 +38,7 @@ public class AgentIntegrationService {
     private final WebChatIdentityService webChatIdentityService;
     private final EmployeePersonalProfileService personalProfileService;
     private final EmploymentCertificateService employmentCertificateService;
+    private final OnboardingService onboardingService;
 
     public AgentIntegrationService(
             OpenApiService openApiService,
@@ -49,7 +51,8 @@ public class AgentIntegrationService {
             AgentCardTokenService cardTokenService,
             WebChatIdentityService webChatIdentityService,
             EmployeePersonalProfileService personalProfileService,
-            EmploymentCertificateService employmentCertificateService
+            EmploymentCertificateService employmentCertificateService,
+            OnboardingService onboardingService
     ) {
         this.openApiService = openApiService;
         this.userAccountRepository = userAccountRepository;
@@ -62,6 +65,7 @@ public class AgentIntegrationService {
         this.webChatIdentityService = webChatIdentityService;
         this.personalProfileService = personalProfileService;
         this.employmentCertificateService = employmentCertificateService;
+        this.onboardingService = onboardingService;
     }
 
     @Transactional
@@ -174,6 +178,8 @@ public class AgentIntegrationService {
                 profile.contractStartDate(),
                 profile.contractEndDate(),
                 profile.workLocation(),
+                profile.monthlySalary(),
+                profile.currency(),
                 profile.updatedAt(),
                 profile.maintained()
         );
@@ -379,6 +385,17 @@ public class AgentIntegrationService {
         log(context.key(), "GET", "/internal/agent/v1/leave/requests/" + requestId, 200,
                 "Leave request status");
         return summary(request);
+    }
+
+    public List<OnboardingDtos.RequestView> onboardingRequests(
+            String rawApiKey,
+            String dingtalkUserId
+    ) {
+        String path = "/internal/agent/v1/onboarding/requests";
+        IntegrationKeyAndUser context = resolve(rawApiKey, dingtalkUserId, "GET", path);
+        List<OnboardingDtos.RequestView> result = onboardingService.mine(context.user());
+        log(context.key(), "GET", path, 200, "New hire onboarding requests query");
+        return result;
     }
 
     public List<AgentIntegrationDtos.NotificationDelivery> pendingNotifications(

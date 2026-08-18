@@ -50,7 +50,8 @@ try {
             'e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17',
             '9f6f1e91-1d0e-4f5c-8fb5-7c2f4f3d9a01',
             'd5e6f7a8-9012-4b3c-8d5e-6f708192a3b4',
-            'c4e6a8b0-2d1f-4c93-8e75-1a6b9d0f2c34'
+            'c4e6a8b0-2d1f-4c93-8e75-1a6b9d0f2c34',
+            'f6b8d2a4-1c73-4e95-9a20-7d4c6b8e1f32'
         )
         foreach ($id in $ids) {
             docker exec hragent-n8n n8n publish:workflow --id=$id
@@ -64,11 +65,11 @@ try {
 }
 
 if ($PublishOnly) {
-    Write-Host 'Eight workflows were published.' -ForegroundColor Green
+    Write-Host 'Nine workflows were published.' -ForegroundColor Green
 } elseif ($Publish) {
-    Write-Host 'Eight workflows were imported and published.' -ForegroundColor Green
+    Write-Host 'Nine workflows were imported and published.' -ForegroundColor Green
 } else {
-    Write-Host 'Eight workflows were imported but not published.' -ForegroundColor Green
+    Write-Host 'Nine workflows were imported but not published.' -ForegroundColor Green
     Write-Host 'Assign the DeepSeek, Qdrant, and Ollama credentials in n8n, then rerun with -Publish.' -ForegroundColor Yellow
 }
 Wait-BeforeExit

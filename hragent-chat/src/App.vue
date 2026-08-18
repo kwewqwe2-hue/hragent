@@ -36,6 +36,7 @@
         <button type="button" @click="fillAccount('zhangsan')">张三</button>
         <button type="button" @click="fillAccount('lisi')">李四</button>
         <button type="button" @click="fillAccount('wanghr')">空间管理员</button>
+        <button type="button" @click="fillAccount('chenchen')">新入职员工</button>
       </div>
     </section>
   </main>
@@ -223,11 +224,56 @@
         <p v-if="attachmentError" class="composer-error">{{ attachmentError }}</p>
       </footer>
     </section>
+
+    <aside
+      ref="quickBoardElement"
+      class="quick-board"
+      :class="{ dragging: boardDragging, celebrating: kakaCelebrating }"
+      :style="boardStyle"
+      aria-label="Kaka 快捷对话"
+    >
+      <section ref="quickBoardPanel" v-if="quickPanelOpen" class="quick-board-panel">
+        <header>
+          <div>
+            <strong>Kaka 快捷对话</strong>
+            <span>点击后新建独立对话</span>
+          </div>
+          <button type="button" title="收起快捷对话" aria-label="收起快捷对话" @click="quickPanelOpen = false">
+            <X :size="16" />
+          </button>
+        </header>
+        <div class="quick-board-actions">
+          <button v-for="action in quickActions" :key="action.title" type="button" class="quick-board-action" @click="runQuickAction(action)">
+            <span>{{ action.title }}</span>
+            <ArrowUpRight :size="15" />
+          </button>
+        </div>
+      </section>
+      <button
+        class="quick-board-handle"
+        type="button"
+        title="打开 Kaka 快捷对话，可拖动位置"
+        aria-label="打开 Kaka 快捷对话，可拖动位置"
+        @pointerdown="startBoardDrag"
+        @pointerup="handleBoardPointerUp"
+      >
+        <img v-if="!kakaCelebrating" class="quick-board-static" src="/kaka-3D.png" alt="Kaka" draggable="false" />
+        <img
+          v-else
+          :key="kakaImageKey"
+          class="quick-board-celebration"
+          src="/kaka-thanks.gif"
+          alt=""
+          aria-hidden="true"
+          draggable="false"
+        />
+      </button>
+    </aside>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import {
@@ -265,9 +311,34 @@ const fileInputElement = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const selectedImageUrl = ref('')
 const attachmentError = ref('')
+const quickPanelOpen = ref(false)
+const boardDragging = ref(false)
+const boardMoved = ref(false)
+const quickBoardElement = ref<HTMLElement | null>(null)
+const quickBoardPanel = ref<HTMLElement | null>(null)
+const kakaCelebrating = ref(false)
+const kakaImageKey = ref(0)
+const kakaCelebrateTimer = ref<number | undefined>(undefined)
 const loginForm = reactive({ username: 'zhangsan', password: '123456' })
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'pdf', 'docx', 'txt'])
+const boardPosition = reactive(readBoardPosition())
+const boardDragStart = reactive({ x: 0, y: 0, left: 0, bottom: 0 })
+const quickActions = [
+  { title: '今日人事提醒', prompt: '请帮我整理今天需要关注的人事事项和待办。' },
+  { title: '入职第一天', prompt: '我是新员工，请告诉我入职第一天需要完成哪些事项。' },
+  { title: '制度速读', prompt: '请用简洁、清晰的方式帮我理解公司制度中最需要注意的内容。' },
+  { title: '请假前检查', prompt: '请在我申请请假前，帮我列出需要确认的信息和材料。' }
+]
+
+const boardStyle = computed(() => ({
+  left: `${boardPosition.left}px`,
+  bottom: `${boardPosition.bottom}px`
+}))
+
+const kakaImageSrc = computed(() => (kakaCelebrating.value
+  ? `/kaka-thanks.gif?v=${kakaImageKey.value}`
+  : '/kaka-3D.png'))
 
 marked.setOptions({
   breaks: true,
@@ -285,6 +356,7 @@ const sortedConversations = computed(() =>
 const userInitial = computed(() => (session.value?.user.name || session.value?.user.username || 'U').slice(0, 1))
 
 const roleLabel = computed(() => {
+  if (session.value?.user.role === 'NEW_HIRE') return '新入职员工'
   if (session.value?.user.role === 'EMPLOYEE') return '员工'
   if (session.value?.user.role === 'MANAGER') return '主管'
   if (session.value?.user.role === 'HR') return '空间管理员'
@@ -292,6 +364,9 @@ const roleLabel = computed(() => {
 })
 
 const suggestions = computed(() => {
+  if (session.value?.user.role === 'NEW_HIRE') {
+    return ['我要办理入职手续', '入职需要准备什么', '查看我的入职进度', '入职当天有什么流程']
+  }
   const items = ['查询我的年假余额', '我要申请年假', '查看我的请假进度']
   items.push(session.value?.user.role === 'MANAGER' ? '查看我的待审批请假' : '查询我的员工信息')
   return items
@@ -299,6 +374,16 @@ const suggestions = computed(() => {
 
 onMounted(() => {
   if (session.value) hydrateConversations()
+  window.addEventListener('resize', clampBoardPosition)
+  void nextTick(clampBoardPosition)
+  const preloaded = new Image()
+  preloaded.src = '/kaka-thanks.gif'
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', clampBoardPosition)
+  if (kakaCelebrateTimer.value !== undefined) window.clearTimeout(kakaCelebrateTimer.value)
+  stopBoardDrag()
 })
 
 watch(conversations, persistConversations, { deep: true })
@@ -315,9 +400,106 @@ function readSession(): AuthSession | null {
   }
 }
 
+function readBoardPosition() {
+  try {
+    const value = JSON.parse(localStorage.getItem('hragent_ai_quick_board_position') || 'null')
+    if (value && Number.isFinite(value.left) && Number.isFinite(value.bottom)) {
+      return { left: value.left, bottom: value.bottom }
+    }
+  } catch {
+    // Use the default corner position when local storage is unavailable.
+  }
+  return { left: 20, bottom: 20 }
+}
+
+function persistBoardPosition() {
+  localStorage.setItem('hragent_ai_quick_board_position', JSON.stringify(boardPosition))
+}
+
+function clampBoardPosition() {
+  const rect = quickBoardElement.value?.getBoundingClientRect()
+  const width = rect?.width || 118
+  const height = rect?.height || 132
+  const panelHeight = quickBoardPanel.value?.getBoundingClientRect().height || 0
+  const totalHeight = height + (quickPanelOpen.value ? panelHeight + 10 : 0)
+  boardPosition.left = Math.max(12, Math.min(boardPosition.left, window.innerWidth - width - 12))
+  boardPosition.bottom = Math.max(12, Math.min(boardPosition.bottom, window.innerHeight - totalHeight - 12))
+}
+
+function startBoardDrag(event: PointerEvent) {
+  if (event.button !== 0) return
+  const rect = quickBoardElement.value?.getBoundingClientRect()
+  if (!rect) return
+  event.preventDefault()
+  boardDragging.value = true
+  boardMoved.value = false
+  boardDragStart.x = event.clientX
+  boardDragStart.y = event.clientY
+  boardDragStart.left = boardPosition.left
+  boardDragStart.bottom = boardPosition.bottom
+  window.addEventListener('pointermove', dragBoard)
+  window.addEventListener('pointerup', stopBoardDrag)
+}
+
+function dragBoard(event: PointerEvent) {
+  if (!boardDragging.value) return
+  const deltaX = event.clientX - boardDragStart.x
+  const deltaY = event.clientY - boardDragStart.y
+  if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) boardMoved.value = true
+  const rect = quickBoardElement.value?.getBoundingClientRect()
+  const width = rect?.width || 118
+  const height = rect?.height || 132
+  const panelHeight = quickBoardPanel.value?.getBoundingClientRect().height || 0
+  const totalHeight = height + (quickPanelOpen.value ? panelHeight + 10 : 0)
+  boardPosition.left = Math.max(12, Math.min(boardDragStart.left + deltaX, window.innerWidth - width - 12))
+  boardPosition.bottom = Math.max(12, Math.min(boardDragStart.bottom - deltaY, window.innerHeight - totalHeight - 12))
+}
+
+function handleBoardPointerUp() {
+  if (!boardMoved.value) {
+    openQuickBoard()
+  }
+  boardMoved.value = false
+}
+
+function stopBoardDrag() {
+  if (!boardDragging.value) return
+  boardDragging.value = false
+  window.removeEventListener('pointermove', dragBoard)
+  window.removeEventListener('pointerup', stopBoardDrag)
+  if (boardMoved.value) persistBoardPosition()
+}
+
+function playKakaCelebrate() {
+  kakaCelebrating.value = true
+  kakaImageKey.value += 1
+  if (kakaCelebrateTimer.value !== undefined) window.clearTimeout(kakaCelebrateTimer.value)
+  kakaCelebrateTimer.value = window.setTimeout(() => {
+    kakaCelebrating.value = false
+  }, 1200)
+}
+
+function openQuickBoard() {
+  quickPanelOpen.value = true
+  playKakaCelebrate()
+  void nextTick(clampBoardPosition)
+}
+
+function runQuickAction(action: { title: string; prompt: string }) {
+  quickPanelOpen.value = false
+  const conversation = createConversation()
+  conversation.title = action.title
+  void send(action.prompt)
+}
+
 function conversationStorageKey() {
   const user = session.value?.user
   return user ? `hragent_ai_conversations:${user.publicId}:${user.tenantId || 'none'}` : ''
+}
+
+function firstLoginWelcomeKey() {
+  const publicId = session.value?.user.publicId
+  return publicId ? `hragent_ai_first_welcome:${publicId}` : ''
 }
 
 function hydrateConversations() {
@@ -332,6 +514,17 @@ function hydrateConversations() {
   } else {
     activeConversationId.value = sortedConversations.value[0].id
   }
+  const welcomeKey = firstLoginWelcomeKey()
+  if (session.value?.user.role === 'NEW_HIRE' && welcomeKey && !localStorage.getItem(welcomeKey)) {
+    appendMessage(activeConversationId.value, 'assistant', [
+      `欢迎加入 ${session.value.user.workspaceName || '企业空间'}！`,
+      '',
+      '你可以在这里询问入职流程、需要准备的材料和当前审核进度。',
+      '入职登记入口：`http://localhost:5173/onboarding`',
+      '工牌和办公用品请到直属上级处领取；如果还不清楚直属上级，请联系 HR。'
+    ].join('\n'))
+    localStorage.setItem(welcomeKey, '1')
+  }
 }
 
 function persistConversations() {
@@ -343,7 +536,7 @@ function createId() {
   return crypto.randomUUID()
 }
 
-function createConversation() {
+function createConversation(): Conversation {
   const now = new Date().toISOString()
   const conversation: Conversation = {
     id: createId(),
@@ -355,6 +548,7 @@ function createConversation() {
   activeConversationId.value = conversation.id
   input.value = ''
   clearAttachment()
+  return conversation
 }
 
 function deleteConversation(id: string) {

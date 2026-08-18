@@ -61,6 +61,7 @@ public class LeaveService {
     }
 
     public List<LeaveDtos.BalanceView> balances(UserAccount user) {
+        requireLeaveEligible(user);
         return leaveBalanceRepository.findByTenantIdAndEmployeeIdOrderByLeaveTypeAsc(user.getTenantId(), user.getId())
                 .stream()
                 .map(balance -> new LeaveDtos.BalanceView(
@@ -74,6 +75,7 @@ public class LeaveService {
     }
 
     public List<AgentIntegrationDtos.BalanceLine> agentBalances(UserAccount user) {
+        requireLeaveEligible(user);
         return leaveBalanceRepository.findByTenantIdAndEmployeeIdOrderByLeaveTypeAsc(user.getTenantId(), user.getId())
                 .stream()
                 .map(balance -> {
@@ -94,6 +96,7 @@ public class LeaveService {
             UserAccount employee,
             LeaveDtos.CreateLeaveRequest request
     ) {
+        requireLeaveEligible(employee);
         UserAccount manager = activeManager(employee);
         if (request.endDate().isBefore(request.startDate())) {
             throw AppException.badRequest("结束日期不能早于开始日期");
@@ -138,6 +141,7 @@ public class LeaveService {
             UserAccount employee,
             LeaveDtos.CreateLeaveRequest request
     ) {
+        requireLeaveEligible(employee);
         activeManager(employee);
         return create(employee, request);
     }
@@ -153,6 +157,7 @@ public class LeaveService {
 
     @Transactional
     public LeaveDtos.LeaveRequestView create(UserAccount employee, LeaveDtos.CreateLeaveRequest request) {
+        requireLeaveEligible(employee);
         if (request.endDate().isBefore(request.startDate())) {
             throw AppException.badRequest("结束日期不能早于开始日期");
         }
@@ -222,6 +227,7 @@ public class LeaveService {
     }
 
     public List<LeaveDtos.LeaveRequestView> mine(UserAccount user) {
+        requireLeaveEligible(user);
         return leaveRequestRepository
                 .findByTenantIdAndEmployeeIdOrderBySubmittedAtDesc(user.getTenantId(), user.getId())
                 .stream()
@@ -230,6 +236,7 @@ public class LeaveService {
     }
 
     public LeaveDtos.CalendarView calendar(UserAccount user, int year) {
+        requireLeaveEligible(user);
         if (year < 2020 || year > 2100) {
             throw AppException.badRequest("日历年份必须在 2020 到 2100 之间");
         }
@@ -422,6 +429,9 @@ public class LeaveService {
     }
 
     public Map<String, Long> stats(UserAccount user) {
+        if (user.getRole() == Role.NEW_HIRE) {
+            return Map.of("pendingManager", 0L, "pendingHr", 0L, "approved", 0L, "rejected", 0L);
+        }
         Long tenantId = user.getTenantId();
         if (user.getRole() == Role.EMPLOYEE) {
             return Map.of(
@@ -447,12 +457,21 @@ public class LeaveService {
                             tenantId, user.getId(), RequestStatus.REJECTED)
             );
         }
-        return Map.of(
+        if (user.getRole() == Role.HR) {
+            return Map.of(
                 "pendingManager", leaveRequestRepository.countByTenantIdAndStatus(tenantId, RequestStatus.PENDING_MANAGER),
                 "pendingHr", leaveRequestRepository.countByTenantIdAndStatus(tenantId, RequestStatus.PENDING_HR),
                 "approved", leaveRequestRepository.countByTenantIdAndStatus(tenantId, RequestStatus.APPROVED),
                 "rejected", leaveRequestRepository.countByTenantIdAndStatus(tenantId, RequestStatus.REJECTED)
-        );
+            );
+        }
+        return Map.of("pendingManager", 0L, "pendingHr", 0L, "approved", 0L, "rejected", 0L);
+    }
+
+    private void requireLeaveEligible(UserAccount user) {
+        if (user.getRole() == Role.NEW_HIRE) {
+            throw AppException.forbidden("新入职员工尚未转为正式员工，不能使用请假功能");
+        }
     }
 
     private LeaveRequest findByIdAndTenant(Long id, Long tenantId) {

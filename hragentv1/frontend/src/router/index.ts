@@ -6,6 +6,7 @@ const router = createRouter({
   routes: [
     { path: '/login', component: () => import('../views/LoginView.vue') },
     { path: '/register', component: () => import('../views/RegisterView.vue') },
+    { path: '/policy-source-demo', component: () => import('../views/DemoPolicySourceView.vue') },
     {
       path: '/',
       component: () => import('../components/AppLayout.vue'),
@@ -16,6 +17,7 @@ const router = createRouter({
         { path: 'account', component: () => import('../views/AccountView.vue') },
         { path: 'personal-info', component: () => import('../views/PersonalInfoView.vue') },
         { path: 'certificates', component: () => import('../views/EmploymentCertificateView.vue') },
+        { path: 'onboarding', component: () => import('../views/OnboardingView.vue') },
         { path: 'platform-admin', component: () => import('../views/PlatformAdminView.vue') },
         { path: 'dashboard', component: () => import('../views/DashboardView.vue') },
         { path: 'directory', component: () => import('../views/DirectoryView.vue') },
@@ -50,6 +52,10 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && auth.isLoggedIn && !auth.hasActiveWorkspace
       && to.path !== '/workspace' && to.path !== '/account' && to.path !== '/platform-admin') {
     return '/workspace'
+  }
+  if (to.meta.requiresAuth && auth.user?.role === 'NEW_HIRE'
+      && !['/onboarding', '/assistant', '/workspace', '/account'].includes(to.path)) {
+    return '/onboarding'
   }
   return true
 })

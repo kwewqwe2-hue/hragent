@@ -1,4 +1,4 @@
-export type Role = 'EMPLOYEE' | 'MANAGER' | 'HR'
+export type Role = 'NEW_HIRE' | 'EMPLOYEE' | 'MANAGER' | 'HR'
 export type MembershipStatus = 'PENDING' | 'PENDING_PROFILE' | 'ACTIVE' | 'REJECTED' | 'LEFT' | 'DISABLED'
 export type LeaveType = 'ANNUAL' | 'SICK' | 'PERSONAL' | 'MARRIAGE'
 export type RequestStatus = 'PENDING_MANAGER' | 'PENDING_HR' | 'APPROVED' | 'REJECTED'
@@ -7,6 +7,7 @@ export type CertificateLanguage = 'CHINESE' | 'ENGLISH' | 'BILINGUAL'
 export type CertificateTemplateReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
 export type CertificateRequestStatus =
   'PENDING_HR' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'GENERATED' | 'GENERATION_FAILED'
+export type OnboardingRequestStatus = 'PENDING_HR' | 'APPROVED' | 'REJECTED'
 
 export interface ApiResponse<T> {
   success: boolean
@@ -174,6 +175,48 @@ export interface KnowledgeArticle {
   reviewStatus: string
 }
 
+export interface DemoPolicy {
+  sourceId: string
+  sourceName: string
+  sourceType: 'DEMO'
+  title: string
+  version: string
+  region: string
+  publishedAt: string
+  effectiveAt: string
+  summary: string
+  content: string
+  changeSummary: string
+  contentHash: string
+  sourceUpdatedAt: string
+  updateAvailable: boolean
+  disclaimer: string
+}
+
+export type PolicyReviewStatus = 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED'
+
+export interface PolicyMonitorCandidate {
+  id: number
+  sourceId: string
+  sourceName: string
+  sourceUrl: string
+  title: string
+  version: string
+  region?: string
+  publishedAt?: string
+  effectiveAt?: string
+  summary?: string
+  content: string
+  changeSummary?: string
+  contentHash: string
+  sourceUpdatedAt?: string
+  detectedAt: string
+  reviewStatus: PolicyReviewStatus
+  reviewedAt?: string
+  reviewOpinion?: string
+  knowledgeArticleId?: number
+}
+
 export interface Employee {
   id: number
   employeeNo: string
@@ -339,6 +382,38 @@ export interface EmploymentCertificateRequest {
   generatedAt?: string
   canCancel: boolean
   documentReady: boolean
+}
+
+export interface OnboardingRequest {
+  id: number
+  newHireId: number
+  employeeNo: string
+  accountName: string
+  legalName: string
+  phone: string
+  personalEmail: string
+  idNumberLast4: string
+  plannedEntryDate: string
+  department: string
+  positionTitle: string
+  managerName?: string
+  workLocation: string
+  emergencyContactName: string
+  emergencyContactPhone: string
+  bankName: string
+  bankCardLast4: string
+  highestEducation: string
+  idDocumentPrepared: boolean
+  bankCardPrepared: boolean
+  educationCertificatePrepared: boolean
+  photoPrepared: boolean
+  officeSuppliesReceived: boolean
+  remarks?: string
+  status: OnboardingRequestStatus
+  statusLabel: string
+  hrOpinion?: string
+  submittedAt: string
+  reviewedAt?: string
 }
 
 export interface Department {

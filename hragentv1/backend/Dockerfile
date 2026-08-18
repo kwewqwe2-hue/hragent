@@ -4,7 +4,12 @@ COPY pom.xml .
 RUN mvn -q -DskipTests dependency:go-offline
 ARG SOURCE_CACHE_BUST=20260730-knowledge-delete
 COPY src ./src
-RUN mvn -q -DskipTests package
+RUN for attempt in 1 2 3; do \
+      mvn -q -DskipTests -Dmaven.wagon.http.retryHandler.count=5 package && exit 0; \
+      if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+      echo "Maven package attempt $attempt failed; retrying in 5 seconds..."; \
+      sleep 5; \
+    done
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app

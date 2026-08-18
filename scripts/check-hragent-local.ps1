@@ -6,9 +6,23 @@
 )
 
 $ErrorActionPreference = 'Continue'
-if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $PSScriptRoot }
-$SaasDir = if ($SaasDir) { $SaasDir } else { Join-Path $RepoRoot 'hragentv1' }
-$N8nDir = if ($N8nDir) { $N8nDir } else { Join-Path $RepoRoot 'n8nwork' }
+if (-not $RepoRoot) {
+    $scriptDirectory = $PSScriptRoot
+    $RepoRoot = if (Test-Path (Join-Path $scriptDirectory 'n8nwork')) {
+        $scriptDirectory
+    } else {
+        Split-Path -Parent $scriptDirectory
+    }
+}
+if (-not $SaasDir) {
+    $saasCandidates = @(
+        (Join-Path $RepoRoot 'hragentv1'),
+        (Join-Path $RepoRoot 'hragent\hragentv1')
+    )
+    $SaasDir = $saasCandidates | Where-Object { Test-Path (Join-Path $_ 'docker-compose.yml') } | Select-Object -First 1
+    if (-not $SaasDir) { $SaasDir = $saasCandidates[0] }
+}
+if (-not $N8nDir) { $N8nDir = Join-Path $RepoRoot 'n8nwork' }
 
 function Wait-BeforeExit {
     if ($NoPause) {
@@ -139,11 +153,17 @@ if (Test-Path $envPath) {
     Write-Check 'n8n .env' $false 'file not found'
 }
 
-$activeWorkflowCount = & docker exec hragent-n8n-postgres psql -U n8n -d n8n -At -c "SELECT count(*) FROM workflow_entity WHERE active=true AND id IN ('LLWdzAOEECp9eSIf','3RiI6nH28eRUuOaz','b83719c3-7b65-4d8a-9c48-6f5fa4b7f421','c8d9e0f1-2a3b-4c5d-6e7f-8a9b0c1d2e3f','e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17','9f6f1e91-1d0e-4f5c-8fb5-7c2f4f3d9a01','d5e6f7a8-9012-4b3c-8d5e-6f708192a3b4','c4e6a8b0-2d1f-4c93-8e75-1a6b9d0f2c34')" 2>$null
-Write-Check 'Required n8n workflows' ($activeWorkflowCount.Trim() -eq '8') ("active=" + $activeWorkflowCount.Trim() + '/8')
+$activeWorkflowCount = & docker exec hragent-n8n-postgres psql -U n8n -d n8n -At -c "SELECT count(*) FROM workflow_entity WHERE active=true AND id IN ('LLWdzAOEECp9eSIf','3RiI6nH28eRUuOaz','b83719c3-7b65-4d8a-9c48-6f5fa4b7f421','c8d9e0f1-2a3b-4c5d-6e7f-8a9b0c1d2e3f','e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17','9f6f1e91-1d0e-4f5c-8fb5-7c2f4f3d9a01','d5e6f7a8-9012-4b3c-8d5e-6f708192a3b4','c4e6a8b0-2d1f-4c93-8e75-1a6b9d0f2c34','f6b8d2a4-1c73-4e95-9a20-7d4c6b8e1f32')" 2>$null
+$activeWorkflowCountValue = if ($null -eq $activeWorkflowCount) { '' } else { ([string]$activeWorkflowCount).Trim() }
+Write-Check 'Required n8n workflows' ($activeWorkflowCountValue -eq '9') $(
+    if ($activeWorkflowCountValue) { "active=$activeWorkflowCountValue/9" } else { 'unavailable (n8n PostgreSQL is not running)' }
+)
 
-$errorBindingCount = & docker exec hragent-n8n-postgres psql -U n8n -d n8n -At -c "SELECT count(*) FROM workflow_entity WHERE id IN ('LLWdzAOEECp9eSIf','3RiI6nH28eRUuOaz','b83719c3-7b65-4d8a-9c48-6f5fa4b7f421','c8d9e0f1-2a3b-4c5d-6e7f-8a9b0c1d2e3f','9f6f1e91-1d0e-4f5c-8fb5-7c2f4f3d9a01','d5e6f7a8-9012-4b3c-8d5e-6f708192a3b4','c4e6a8b0-2d1f-4c93-8e75-1a6b9d0f2c34') AND settings->>'errorWorkflow'='e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17'" 2>$null
-Write-Check 'n8n error workflow bindings' ($errorBindingCount.Trim() -eq '7') ("bound=" + $errorBindingCount.Trim() + '/7')
+$errorBindingCount = & docker exec hragent-n8n-postgres psql -U n8n -d n8n -At -c "SELECT count(*) FROM workflow_entity WHERE id IN ('LLWdzAOEECp9eSIf','3RiI6nH28eRUuOaz','b83719c3-7b65-4d8a-9c48-6f5fa4b7f421','c8d9e0f1-2a3b-4c5d-6e7f-8a9b0c1d2e3f','9f6f1e91-1d0e-4f5c-8fb5-7c2f4f3d9a01','d5e6f7a8-9012-4b3c-8d5e-6f708192a3b4','c4e6a8b0-2d1f-4c93-8e75-1a6b9d0f2c34','f6b8d2a4-1c73-4e95-9a20-7d4c6b8e1f32') AND settings->>'errorWorkflow'='e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17'" 2>$null
+$errorBindingCountValue = if ($null -eq $errorBindingCount) { '' } else { ([string]$errorBindingCount).Trim() }
+Write-Check 'n8n error workflow bindings' ($errorBindingCountValue -eq '8') $(
+    if ($errorBindingCountValue) { "bound=$errorBindingCountValue/8" } else { 'unavailable (n8n PostgreSQL is not running)' }
+)
 
 Write-Host "`nThis script only checks status. It does not restart containers or modify .env." -ForegroundColor Cyan
 Wait-BeforeExit

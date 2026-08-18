@@ -433,6 +433,9 @@ public class ImportService {
             return EmployeeStatus.ACTIVE;
         }
         String normalized = value.trim().toUpperCase();
+        if (normalized.equals("ONBOARDING") || normalized.equals("NEW_HIRE")) {
+            return EmployeeStatus.ONBOARDING;
+        }
         if (normalized.equals("LEFT") || normalized.equals("RESIGNED") || normalized.equals("OFFBOARD")) {
             return EmployeeStatus.LEFT;
         }
@@ -447,6 +450,9 @@ public class ImportService {
             return Role.EMPLOYEE;
         }
         String normalized = value.trim().toUpperCase();
+        if (normalized.equals("NEW_HIRE") || normalized.equals("ONBOARDING")) {
+            return Role.NEW_HIRE;
+        }
         if (normalized.equals("MANAGER") || normalized.equals("SUPERVISOR")) {
             return Role.MANAGER;
         }

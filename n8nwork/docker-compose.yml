@@ -88,10 +88,10 @@ services:
       N8N_RESTRICT_FILE_ACCESS_TO: /knowledge-files
       HTTP_PROXY: ${N8N_HTTP_PROXY:-http://host.docker.internal:7897}
       HTTPS_PROXY: ${N8N_HTTPS_PROXY:-http://host.docker.internal:7897}
-      NO_PROXY: localhost,127.0.0.1,n8n,qdrant,ollama,postgres,pdf-parser,ocr,hragent-backend,hragent-frontend,hragent-chat,host.docker.internal
+      NO_PROXY: localhost,127.0.0.1,n8n,qdrant,ollama,postgres,pdf-parser,ocr,hragent-backend,hragent-frontend,hragent-chat,host.docker.internal,api.deepseek.com
       http_proxy: ${N8N_HTTP_PROXY:-http://host.docker.internal:7897}
       https_proxy: ${N8N_HTTPS_PROXY:-http://host.docker.internal:7897}
-      no_proxy: localhost,127.0.0.1,n8n,qdrant,ollama,postgres,pdf-parser,ocr,hragent-backend,hragent-frontend,hragent-chat,host.docker.internal
+      no_proxy: localhost,127.0.0.1,n8n,qdrant,ollama,postgres,pdf-parser,ocr,hragent-backend,hragent-frontend,hragent-chat,host.docker.internal,api.deepseek.com
       GENERIC_TIMEZONE: Asia/Shanghai
       TZ: Asia/Shanghai
       NODE_OPTIONS: "--dns-result-order=ipv4first"
@@ -103,7 +103,7 @@ services:
       DINGTALK_APP_KEY: ${DINGTALK_APP_KEY:-}
       DINGTALK_APP_SECRET: ${DINGTALK_APP_SECRET:-}
       DINGTALK_APPROVAL_BASE_URL: ${DINGTALK_APPROVAL_BASE_URL:-}
-      SAAS_BASE_URL: ${SAAS_BASE_URL:-http://host.docker.internal:8080/api}
+      SAAS_BASE_URL: ${SAAS_BASE_URL:-http://hragent-backend:8080/api}
     extra_hosts:
       - "host.docker.internal:host-gateway"
       # DingTalk currently advertises IPv6 first, but this Docker network has no IPv6 route.

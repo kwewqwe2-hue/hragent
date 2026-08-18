@@ -73,6 +73,8 @@ public final class AgentIntegrationDtos {
             LocalDate contractStartDate,
             LocalDate contractEndDate,
             String workLocation,
+            BigDecimal monthlySalary,
+            String currency,
             LocalDateTime updatedAt,
             boolean maintained
     ) {

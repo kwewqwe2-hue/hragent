@@ -225,6 +225,54 @@ public class WorkspaceService {
         return memberView(membershipRepository.save(membership));
     }
 
+    @Transactional
+    public WorkspaceDtos.MemberView removeMember(
+            HttpServletRequest request,
+            Long workspaceId,
+            Long membershipId
+    ) {
+        WorkspaceMembership actor = authService.requireWorkspaceRole(request, workspaceId, Role.HR);
+        WorkspaceMembership membership = membershipRepository.findById(membershipId)
+                .filter(item -> item.getWorkspaceId().equals(workspaceId))
+                .orElseThrow(() -> AppException.notFound("空间成员不存在"));
+        if (membership.getAccountId().equals(actor.getAccountId())) {
+            throw AppException.badRequest("不能移除自己的空间成员关系");
+        }
+        if (membership.getRole() == Role.HR
+                && membership.getStatus() == MembershipStatus.ACTIVE
+                && membershipRepository.countByWorkspaceIdAndRoleAndStatus(
+                workspaceId, Role.HR, MembershipStatus.ACTIVE) <= 1) {
+            throw AppException.badRequest("最后一名空间管理员不能被移除");
+        }
+
+        UserAccount profile = membership.getEmployeeProfileId() == null
+                ? null
+                : userAccountRepository.findById(membership.getEmployeeProfileId()).orElse(null);
+        if (profile != null && membership.getRole() == Role.MANAGER
+                && userAccountRepository.countByTenantIdAndManagerIdAndActiveTrue(workspaceId, profile.getId()) > 0) {
+            throw AppException.badRequest("该主管仍有直属员工，请先调整直属关系");
+        }
+        membership.setStatus(MembershipStatus.DISABLED);
+        membership.setReviewedAt(LocalDateTime.now());
+        if (profile != null) {
+            profile.setActive(false);
+            profile.setEmployeeStatus(EmployeeStatus.LEFT);
+            profile.setDingtalkUserId(null);
+            profile.setDingtalkStaffId(null);
+            profile.setDingtalkBindingCodeHash(null);
+            profile.setDingtalkBindingCodeExpiresAt(null);
+            userAccountRepository.save(profile);
+        }
+        WorkspaceMembership saved = membershipRepository.save(membership);
+        UserAccount auditActor = actor.getEmployeeProfileId() == null
+                ? profile
+                : userAccountRepository.findById(actor.getEmployeeProfileId()).orElse(profile);
+        if (auditActor != null) {
+            auditService.log(auditActor, "REMOVE_WORKSPACE_MEMBER", "workspace_membership", membershipId, workspaceId.toString());
+        }
+        return memberView(saved);
+    }
+
     private UserAccount createAdminProfile(Tenant workspace, PlatformAccount account) {
         UserAccount profile = new UserAccount();
         profile.setTenantId(workspace.getId());

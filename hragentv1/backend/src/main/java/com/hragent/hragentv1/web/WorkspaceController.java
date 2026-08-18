@@ -82,4 +82,13 @@ public class WorkspaceController {
     ) {
         return ApiResponse.ok(workspaceService.updateRole(servletRequest, workspaceId, membershipId, request));
     }
+
+    @DeleteMapping("/{workspaceId}/members/{membershipId}")
+    public ApiResponse<WorkspaceDtos.MemberView> removeMember(
+            HttpServletRequest request,
+            @PathVariable Long workspaceId,
+            @PathVariable Long membershipId
+    ) {
+        return ApiResponse.ok("成员已从企业空间移除", workspaceService.removeMember(request, workspaceId, membershipId));
+    }
 }

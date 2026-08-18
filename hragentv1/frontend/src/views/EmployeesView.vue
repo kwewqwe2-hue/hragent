@@ -85,6 +85,7 @@
           <el-col :xs="24" :sm="12">
             <el-form-item label="空间角色">
               <el-select v-model="form.role" style="width: 100%">
+                <el-option label="新入职员工" value="NEW_HIRE" />
                 <el-option label="员工" value="EMPLOYEE" />
                 <el-option label="主管" value="MANAGER" />
                 <el-option label="空间管理员" value="HR" />
@@ -151,6 +152,7 @@
           <el-col :xs="24" :sm="12">
             <el-form-item label="员工状态">
               <el-select v-model="form.employeeStatus" style="width: 100%">
+                <el-option label="入职办理中" value="ONBOARDING" />
                 <el-option label="在职" value="ACTIVE" />
                 <el-option label="停用" value="INACTIVE" />
                 <el-option label="离职" value="LEFT" />
@@ -313,12 +315,14 @@ const filteredEmployees = computed(() => {
 })
 
 function roleLabel(role: Role) {
+  if (role === 'NEW_HIRE') return '新入职员工'
   if (role === 'HR') return '空间管理员'
   if (role === 'MANAGER') return '主管'
   return '员工'
 }
 
 function statusLabel(status: string) {
+  if (status === 'ONBOARDING') return '入职办理中'
   if (status === 'LEFT') return '离职'
   if (status === 'INACTIVE') return '停用'
   return '在职'

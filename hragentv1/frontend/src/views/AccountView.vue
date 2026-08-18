@@ -67,16 +67,24 @@
         <el-button :loading="changing" @click="savePassword">更新密码</el-button>
       </el-form>
     </section>
+
+    <section class="content-panel danger-panel">
+      <div class="toolbar-row"><strong>账号安全</strong></div>
+      <p>永久注销会停用账号、解除企业关系并清除个人资料，此操作不可恢复。历史业务记录会保留用于审计。</p>
+      <el-button type="danger" plain @click="deleteAccount">永久注销账号</el-button>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, watchEffect } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import { getData, postData } from '../api/http'
+import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
+const router = useRouter()
 const saving = ref(false)
 const changing = ref(false)
 const generatingCode = ref(false)
@@ -143,6 +151,45 @@ async function savePassword() {
     changing.value = false
   }
 }
+
+async function deleteAccount() {
+  await ElMessageBox.confirm(
+    '永久注销后将无法登录，个人资料、企业关系和钉钉绑定会被清除，历史业务记录仅作为审计记录保留。确定继续吗？',
+    '永久注销账号',
+    { confirmButtonText: '继续注销', cancelButtonText: '取消', type: 'warning' }
+  )
+  const passwordResult = await ElMessageBox.prompt('请输入当前登录密码', '验证账号', {
+    confirmButtonText: '下一步',
+    cancelButtonText: '取消',
+    inputType: 'password',
+    inputPlaceholder: '当前密码',
+    inputValidator: (value) => Boolean(value?.trim()) || '请输入当前密码'
+  })
+  const confirmationResult = await ElMessageBox.prompt('请输入“永久注销”以确认不可恢复操作', '最终确认', {
+    confirmButtonText: '确认注销',
+    cancelButtonText: '取消',
+    inputPlaceholder: '永久注销',
+    inputValidator: (value) => value === '永久注销' || '请输入：永久注销'
+  })
+  try {
+    await postData('/auth/delete-account', {
+      currentPassword: passwordResult.value,
+      confirmation: confirmationResult.value
+    })
+    await ElMessageBox.alert('账号已永久注销，即将返回登录页。', '操作完成', {
+      type: 'success',
+      confirmButtonText: '返回登录'
+    })
+    localStorage.removeItem('hragent_token')
+    localStorage.removeItem('hragent_user')
+    localStorage.removeItem('hragent_workspaces')
+    localStorage.removeItem('hragent_workspace_id')
+    auth.$reset()
+    await router.replace('/login')
+  } catch {
+    // The HTTP interceptor already displays the server error.
+  }
+}
 </script>
 
 <style scoped>
@@ -154,6 +201,18 @@ async function savePassword() {
 
 .password-panel {
   margin-top: 16px;
+}
+
+.danger-panel {
+  max-width: 860px;
+  margin-top: 16px;
+  border-color: #f2c7c5;
+}
+
+.danger-panel p {
+  color: #687386;
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .dingtalk-panel {

@@ -126,6 +126,7 @@ const accountInitial = computed(() => (auth.user?.name || auth.user?.username ||
 const roleLabel = computed(() => roleText(auth.user?.role))
 
 function roleText(role?: Role) {
+  if (role === 'NEW_HIRE') return '新入职员工'
   if (role === 'EMPLOYEE') return '员工'
   if (role === 'MANAGER') return '主管'
   if (role === 'HR') return '空间管理员'
@@ -155,6 +156,13 @@ const menuItems = computed<MenuItem[]>(() => {
     { path: '/assistant', label: '智能助手', icon: ChatDotRound },
     { path: '/knowledge', label: '知识库', icon: Notebook }
   ]
+  if (auth.user?.role === 'NEW_HIRE') {
+    return [
+      { path: '/onboarding', label: '入职办理', icon: Postcard },
+      common[1],
+      { path: '/workspace', label: '企业空间', icon: OfficeBuilding }
+    ]
+  }
   if (auth.user?.role === 'EMPLOYEE') {
     return [
       common[0],
@@ -184,6 +192,7 @@ const menuItems = computed<MenuItem[]>(() => {
   }
   return [
     common[0],
+    { path: '/onboarding', label: '入职管理', icon: Postcard },
     { path: '/my-leave', label: '我的请假', icon: Document },
     { path: '/certificates', label: '证明管理', icon: Document },
     common[1],

@@ -20,7 +20,7 @@ public class KnowledgeArticle {
     @Column(nullable = false, length = 160)
     private String title;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String content;
 
     @Column(length = 240)

@@ -24,6 +24,7 @@
       </el-form>
 
       <div class="accounts">
+        <button @click="fill('chenchen')">新员工 chenchen</button>
         <button @click="fill('zhangsan')">员工 zhangsan</button>
         <button @click="fill('lisi')">主管 lisi</button>
         <button @click="fill('wanghr')">HR wanghr</button>
@@ -58,7 +59,11 @@ async function submit() {
   try {
     await auth.login(form.username, form.password)
     ElMessage.success('登录成功')
-    router.push(auth.user?.platformAdmin ? '/platform-admin' : auth.hasActiveWorkspace ? '/dashboard' : '/workspace')
+    router.push(auth.user?.platformAdmin
+      ? '/platform-admin'
+      : auth.user?.role === 'NEW_HIRE'
+        ? '/onboarding'
+        : auth.hasActiveWorkspace ? '/dashboard' : '/workspace')
   } finally {
     loading.value = false
   }

@@ -240,6 +240,57 @@ public class AuthService {
         }
     }
 
+    @Transactional
+    public void deleteAccount(HttpServletRequest request, AuthDtos.DeleteAccountRequest input) {
+        String token = extractToken(request);
+        PlatformAccount account = requireAccount(request);
+        if (account.isPlatformAdmin()) {
+            throw AppException.badRequest("平台管理员账号不能自助注销");
+        }
+        if (!passwordEncoder.matches(input.currentPassword(), account.getPasswordHash())) {
+            throw AppException.badRequest("当前密码不正确");
+        }
+        if (!"永久注销".equals(input.confirmation().trim())) {
+            throw AppException.badRequest("请输入“永久注销”确认操作");
+        }
+
+        for (WorkspaceMembership membership : membershipRepository.findByAccountIdOrderByCreatedAtDesc(account.getId())) {
+            if (membership.getEmployeeProfileId() != null) {
+                userAccountRepository.findById(membership.getEmployeeProfileId()).ifPresent(profile -> {
+                    profile.setActive(false);
+                    profile.setEmployeeStatus(EmployeeStatus.LEFT);
+                    profile.setAccountId(null);
+                    profile.setName("已注销用户");
+                    profile.setEmail(null);
+                    profile.setPhone(null);
+                    profile.setDingtalkUserId(null);
+                    profile.setDingtalkStaffId(null);
+                    profile.setDingtalkBindingCodeHash(null);
+                    profile.setDingtalkBindingCodeExpiresAt(null);
+                    userAccountRepository.save(profile);
+                });
+            }
+            membership.setStatus(MembershipStatus.DISABLED);
+            membership.setEmployeeProfileId(null);
+            membershipRepository.save(membership);
+        }
+
+        account.setActive(false);
+        account.setName("已注销用户");
+        account.setEmail("deleted-" + account.getPublicId().toLowerCase() + "@invalid.local");
+        account.setUsername("deleted-" + account.getPublicId().toLowerCase());
+        account.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+        account.setAvatarUrl(null);
+        account.setUpdatedAt(LocalDateTime.now());
+        accountRepository.save(account);
+        fallbackSessions.remove(token);
+        try {
+            redisTemplate.delete(redisKey(token));
+        } catch (RedisConnectionFailureException ignored) {
+            // The account is inactive even when Redis is unavailable.
+        }
+    }
+
     private UserProfile profile(PlatformAccount account, WorkspaceMembership membership) {
         Tenant workspace = membership == null ? null : tenantRepository.findById(membership.getWorkspaceId()).orElse(null);
         UserAccount employee = membership == null || membership.getEmployeeProfileId() == null

@@ -70,10 +70,23 @@
               :disabled="row.accountId === auth.user?.id"
               @change="(role: Role) => updateRole(row, role)"
             >
+              <el-option label="新入职员工" value="NEW_HIRE" />
               <el-option label="员工" value="EMPLOYEE" />
               <el-option label="主管" value="MANAGER" />
               <el-option label="空间管理员" value="HR" />
             </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.accountId !== auth.user?.id && row.status !== 'DISABLED'"
+              size="small"
+              type="danger"
+              plain
+              :icon="Delete"
+              @click="removeMember(row)"
+            >移除</el-button>
           </template>
         </el-table-column>
         <el-table-column label="建档" width="100" fixed="right">
@@ -98,9 +111,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Edit, Refresh } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { getData, postData, putData } from '../api/http'
+import { Delete, Edit, Refresh } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { deleteData, getData, postData, putData } from '../api/http'
 import type { MembershipStatus, Role, WorkspaceMember } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 
@@ -151,6 +164,19 @@ async function updateRole(member: WorkspaceMember, role: Role) {
   if (!workspaceId || member.role === role) return
   await putData(`/workspaces/${workspaceId}/members/${member.membershipId}/role`, { role })
   ElMessage.success('成员角色已更新')
+  await load()
+}
+
+async function removeMember(member: WorkspaceMember) {
+  const workspaceId = auth.user?.tenantId
+  if (!workspaceId) return
+  await ElMessageBox.confirm(
+    `移除 ${member.name} 后，他将无法继续访问当前企业空间。历史业务记录会保留。`,
+    '确认移除成员',
+    { confirmButtonText: '确认移除', cancelButtonText: '取消', type: 'warning' }
+  )
+  await deleteData(`/workspaces/${workspaceId}/members/${member.membershipId}`)
+  ElMessage.success('成员已移除')
   await load()
 }
 

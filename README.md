@@ -15,6 +15,8 @@ HRAgent 是一个本地运行的员工关系 SaaS Demo，并通过同一套 n8n 
 - n8n + Qdrant + Ollama `bge-m3` 的本地 RAG 知识库。
 - PDF/TXT/CSV/XLSX 知识文件导入；聊天入口支持图片 OCR 和常见文档临时分析。
 - 个人信息、在职/签证证明申请、DOCX 模板、HR 审核和演示电子签章。
+- 当前用户个人信息与税前月薪查询；后端强制限制员工只能读取本人数据。
+- 政策网站更新监测演示、候选去重、HR 审核以及审核通过后自动写入 RAG。
 - SaaS API Key、智能体工具接口、调用日志和错误工作流。
 
 ## 目录
@@ -73,10 +75,10 @@ Docker 会自动提供以下运行时，无需在主机单独安装：
 
 ## 首次安装
 
-### 1. 克隆 v1 分支
+### 1. 克隆 v2 分支
 
 ```powershell
-git clone -b v1 https://github.com/kwewqwe2-hue/hragent.git
+git clone -b v2 https://github.com/kwewqwe2-hue/hragent.git
 cd hragent
 ```
 
@@ -141,7 +143,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-hragent-local.ps1 -Buil
 ### 5. 初始化 n8n
 
 1. 打开 `http://localhost:5678`，创建本地 n8n Owner 账号。
-2. 导入 8 个维护中的工作流，但暂时不要发布：
+2. 导入 9 个维护中的工作流，但暂时不要发布：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\import-n8n-workflows.ps1
@@ -167,7 +169,7 @@ n8nwork/saas-agent.env
 SAAS_AGENT_API_KEY=生成的真实密钥
 ```
 
-5. 保存工作流后发布全部 8 个工作流：
+5. 保存工作流后发布全部 9 个工作流：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\import-n8n-workflows.ps1 -PublishOnly
@@ -206,8 +208,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-hragent-local.ps1
 关键结果应为：
 
 ```text
-[OK] Required n8n workflows - active=8/8
-[OK] n8n error workflow bindings - bound=7/7
+[OK] Required n8n workflows - active=9/9
+[OK] n8n error workflow bindings - bound=8/8
 ```
 
 ## 日常运行
@@ -245,7 +247,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\stop-hragent-local.ps1
 | `initialize-hragent-config.ps1` | 创建本地 `.env` 并生成随机密钥 |
 | `start-hragent-local.ps1` | 启动完整环境、可选构建/模型下载/隧道 |
 | `stop-hragent-local.ps1` | 停止容器但保留数据卷 |
-| `import-n8n-workflows.ps1` | 首次导入或发布 8 个维护工作流 |
+| `import-n8n-workflows.ps1` | 首次导入或发布 9 个维护工作流 |
 | `refresh-hragent-tunnel.ps1` | 获取隧道并同步 n8n 配置 |
 | `check-hragent-local.ps1` | 只读健康检查，不修改配置 |
 | `run-hragent-acceptance.ps1` | 边界验收，需要显式传入测试用钉钉用户 ID |
@@ -294,7 +296,7 @@ docker compose up -d --force-recreate n8n ollama
 docker compose --profile quick-tunnel up -d --force-recreate cloudflared-quick
 ```
 
-### 检测显示 `active=2/8`
+### 检测显示工作流未全部激活
 
 工作流仍在数据库中，但导入操作可能把发布状态关闭。重新绑定凭据后执行：
 

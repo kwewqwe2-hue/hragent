@@ -40,4 +40,10 @@ public class AuthDtos {
             @NotBlank @Size(min = 6, max = 72) String newPassword
     ) {
     }
+
+    public record DeleteAccountRequest(
+            @NotBlank String currentPassword,
+            @NotBlank String confirmation
+    ) {
+    }
 }

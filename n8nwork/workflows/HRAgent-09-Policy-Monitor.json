@@ -1,0 +1,230 @@
+﻿{
+    "id":  "f6b8d2a4-1c73-4e95-9a20-7d4c6b8e1f32",
+    "name":  "HRAgent-09-Policy-Monitor",
+    "active":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "field":  "minutes",
+                                                                           "minutesInterval":  5
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       0,
+                                       -120
+                                   ],
+                      "id":  "169b3c5d-7e91-4a2b-8c4d-6e8f0a1b2c3d",
+                      "name":  "Every 5 Minutes"
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "hragent-policy-monitor-check",
+                                         "responseMode":  "lastNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       0,
+                                       120
+                                   ],
+                      "id":  "27ac4d6e-8f02-4b3c-9d5e-7f0a1b2c3d4e",
+                      "name":  "Manual Check Webhook",
+                      "webhookId":  "38bd5e7f-9013-4c4d-ae6f-801b2c3d4e5f"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "const expected = String($env.WEB_ATTACHMENT_INTERNAL_KEY || \u0027\u0027);\nconst supplied = String($json.headers?.[\u0027x-hragent-internal-key\u0027] || \u0027\u0027);\nif (!expected || supplied !== expected) {\n  throw new Error(\u0027Policy monitor manual request is not authorized\u0027);\n}\nreturn [{ json: { trigger: \u0027manual\u0027 } }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       120
+                                   ],
+                      "id":  "49ce6f80-a124-4d5e-bf70-912c3d4e5f60",
+                      "name":  "Validate Manual Check"
+                  },
+                  {
+                      "parameters":  {
+                                         "url":  "={{ $env.SAAS_BASE_URL + \u0027/demo-policy/current\u0027 }}",
+                                         "options":  {
+                                                         "response":  {
+                                                                          "response":  {
+                                                                                           "responseFormat":  "json"
+                                                                                       }
+                                                                      }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       480,
+                                       0
+                                   ],
+                      "id":  "5adf7081-b235-4e6f-8071-a23d4e5f6071",
+                      "name":  "Read Demo Policy Source",
+                      "retryOnFail":  true,
+                      "maxTries":  3,
+                      "waitBetweenTries":  1000
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "const response = $input.first().json || {};\nconst policy = response.data || response;\nif (!policy.sourceId || !policy.version || !policy.contentHash || !policy.title || !policy.content) {\n  throw new Error(\u0027Policy source response is missing required fields\u0027);\n}\nreturn [{ json: {\n  sourceId: String(policy.sourceId),\n  sourceName: String(policy.sourceName || \u0027Demo policy source\u0027),\n  sourceUrl: \u0027http://localhost:5173/policy-source-demo\u0027,\n  title: String(policy.title),\n  version: String(policy.version),\n  region: policy.region || null,\n  publishedAt: policy.publishedAt || null,\n  effectiveAt: policy.effectiveAt || null,\n  summary: policy.summary || null,\n  content: String(policy.content),\n  changeSummary: policy.changeSummary || null,\n  contentHash: String(policy.contentHash).toLowerCase(),\n  sourceUpdatedAt: policy.sourceUpdatedAt || null\n} }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       720,
+                                       0
+                                   ],
+                      "id":  "6be08192-c346-4f70-9182-b34e5f607182",
+                      "name":  "Normalize Policy Snapshot"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.SAAS_BASE_URL + \u0027/internal/agent/v1/policy-monitor/check\u0027 }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "X-API-Key",
+                                                                                         "value":  "={{ $env.SAAS_AGENT_API_KEY }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ $json }}",
+                                         "options":  {
+                                                         "response":  {
+                                                                          "response":  {
+                                                                                           "responseFormat":  "json"
+                                                                                       }
+                                                                      }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       960,
+                                       0
+                                   ],
+                      "id":  "7cf192a3-d457-4081-a293-c45f60718293",
+                      "name":  "Save Policy Monitor Checkpoint",
+                      "retryOnFail":  true,
+                      "maxTries":  3,
+                      "waitBetweenTries":  1000
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "const response = $input.first().json || {};\nconst data = response.data || response;\nreturn [{ json: {\n  success: response.success !== false,\n  monitorStatus: data.monitorStatus || \u0027UNKNOWN\u0027,\n  previousVersion: data.previousVersion || null,\n  version: data.candidate?.version || null,\n  candidateId: data.candidate?.id || null,\n  reviewStatus: data.candidate?.reviewStatus || null\n} }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1200,
+                                       0
+                                   ],
+                      "id":  "8d02a3b4-e568-4192-b3a4-d560718293a4",
+                      "name":  "Return Monitor Result"
+                  }
+              ],
+    "pinData":  {
+
+                },
+    "connections":  {
+                        "Every 5 Minutes":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Read Demo Policy Source",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Manual Check Webhook":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Validate Manual Check",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Validate Manual Check":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Read Demo Policy Source",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Read Demo Policy Source":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Normalize Policy Snapshot",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "Normalize Policy Snapshot":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Save Policy Monitor Checkpoint",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Save Policy Monitor Checkpoint":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "Return Monitor Result",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "timezone":  "Asia/Shanghai",
+                     "errorWorkflow":  "e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17"
+                 },
+    "versionId":  "c146e7f8-29ac-45d6-f7e8-19a4b5c6d7e8",
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "tags":  [
+
+             ]
+}

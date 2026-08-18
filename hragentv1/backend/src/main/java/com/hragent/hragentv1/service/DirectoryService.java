@@ -32,6 +32,9 @@ public class DirectoryService {
     }
 
     public DirectoryDtos.DirectoryOverview overview(UserAccount actor) {
+        if (actor.getRole() == Role.NEW_HIRE) {
+            throw AppException.forbidden("新入职员工暂不能查看企业通讯录");
+        }
         List<UserAccount> employees = userAccountRepository.findByTenantIdOrderByIdAsc(actor.getTenantId()).stream()
                 .filter(UserAccount::isActive)
                 .filter(employee -> employee.getEmployeeStatus() == null
@@ -53,6 +56,9 @@ public class DirectoryService {
     }
 
     public DirectoryDtos.EmployeeDetail employeeDetail(UserAccount actor, Long employeeId) {
+        if (actor.getRole() == Role.NEW_HIRE) {
+            throw AppException.forbidden("新入职员工暂不能查看员工档案");
+        }
         UserAccount employee = userAccountRepository.findById(employeeId)
                 .filter(item -> item.getTenantId().equals(actor.getTenantId()))
                 .orElseThrow(() -> AppException.notFound("员工档案不存在"));

@@ -77,6 +77,9 @@ public class DataInitializer {
                             passwordEncoder
                     )));
 
+            ensureDemoEmploymentData(userAccountRepository, manager, LocalDate.of(2024, 1, 15));
+            ensureDemoEmploymentData(userAccountRepository, hr, LocalDate.of(2023, 8, 1));
+
             if (manager.getManagerId() == null) {
                 manager.setManagerId(hr.getId());
                 userAccountRepository.save(manager);
@@ -98,10 +101,32 @@ public class DataInitializer {
                             passwordEncoder
                     )));
 
+            ensureDemoEmploymentData(userAccountRepository, employee, LocalDate.of(2025, 3, 10));
+
             if (employee.getManagerId() == null) {
                 employee.setManagerId(manager.getId());
                 userAccountRepository.save(employee);
             }
+
+            UserAccount newHire = userAccountRepository.findByUsername("chenchen")
+                    .orElseGet(() -> {
+                        UserAccount created = user(
+                                "chenchen",
+                                "NH001",
+                                "陈晨",
+                                Role.NEW_HIRE,
+                                "Pending assignment",
+                                "New hire",
+                                "chenchen@example.com",
+                                "13800000004",
+                                LocalDate.of(2026, 9, 1),
+                                tenant.getId(),
+                                null,
+                                passwordEncoder
+                        );
+                        created.setEmployeeStatus(EmployeeStatus.ONBOARDING);
+                        return userAccountRepository.save(created);
+                    });
 
             seedPersonalProfile(
                     employeePersonalProfileRepository,
@@ -187,6 +212,13 @@ public class DataInitializer {
             linkDemoAccount(
                     employee,
                     "USR-ZHANGSAN-DEMO",
+                    platformAccountRepository,
+                    workspaceMembershipRepository,
+                    userAccountRepository
+            );
+            linkDemoAccount(
+                    newHire,
+                    "USR-CHENCHEN-DEMO",
                     platformAccountRepository,
                     workspaceMembershipRepository,
                     userAccountRepository
@@ -328,6 +360,25 @@ public class DataInitializer {
         user.setEmployeeStatus(EmployeeStatus.ACTIVE);
         user.setManagerId(managerId);
         return user;
+    }
+
+    private void ensureDemoEmploymentData(
+            UserAccountRepository repository,
+            UserAccount account,
+            LocalDate entryDate
+    ) {
+        boolean changed = false;
+        if (account.getEntryDate() == null) {
+            account.setEntryDate(entryDate);
+            changed = true;
+        }
+        if (account.getEmployeeStatus() == null) {
+            account.setEmployeeStatus(EmployeeStatus.ACTIVE);
+            changed = true;
+        }
+        if (changed) {
+            repository.save(account);
+        }
     }
 
     private void seedBalance(

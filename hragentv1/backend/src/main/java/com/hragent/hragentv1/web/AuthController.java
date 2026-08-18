@@ -78,4 +78,13 @@ public class AuthController {
         authService.logout(request);
         return ApiResponse.ok("已退出登录", null);
     }
+
+    @PostMapping("/delete-account")
+    public ApiResponse<Void> deleteAccount(
+            HttpServletRequest request,
+            @Valid @RequestBody AuthDtos.DeleteAccountRequest input
+    ) {
+        authService.deleteAccount(request, input);
+        return ApiResponse.ok("账号已永久注销", null);
+    }
 }

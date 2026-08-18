@@ -475,7 +475,8 @@ public class EmploymentCertificateService {
     }
 
     private void requireActiveEmployee(UserAccount actor) {
-        if (actor.getEmployeeStatus() != null && actor.getEmployeeStatus() != EmployeeStatus.ACTIVE) {
+        if (actor.getRole() == Role.NEW_HIRE
+                || (actor.getEmployeeStatus() != null && actor.getEmployeeStatus() != EmployeeStatus.ACTIVE)) {
             throw AppException.badRequest("只有在职员工可以申请在职证明");
         }
     }
