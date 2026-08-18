@@ -1,0 +1,1098 @@
+[
+  {
+    "updatedAt": "2026-07-31T04:02:18.262Z",
+    "createdAt": "2026-07-21T06:51:29.700Z",
+    "id": "LLWdzAOEECp9eSIf",
+    "name": "HRAgent-02-钉钉机器人",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "hragent-dingtalk-8a2d811d-0fe5-4198-8e61-288ec417fc04",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "id": "90c1552a-2202-4a79-9d65-4b835d5ab76f",
+        "name": "Webhook",
+        "webhookId": "9cd1807d-fbbd-40e4-99ac-1404cbefc061"
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.extractedText !== undefined\n  ? ('【系统已完成附件解析，请勿再次调用文件解析工具】\\n文件名：' + String($json.fileName || '未命名文件') + '\\n解析内容：\\n' + String($json.extractedText || '') + '\\n\\n请根据以上可见内容，用简体中文向用户说明识别结果；不得编造图片中没有的信息。')\n  : String($json.body?.text?.content || '')\n}}",
+          "options": {
+            "systemMessage": "语言规则：所有最终回复必须使用简体中文，即使工具错误、附件内容或用户消息是英文，也必须用中文解释。\n你是当前 Demo 企业的专业 HR 助手。钉钉只是入口，SaaS 后端是身份、组织、余额、请假、审批和备案状态的唯一来源；聊天记忆只能帮助理解上下文，不能作为业务状态依据。\n身份与权限：\n1. 涉及员工、余额、请假时先调用 SaaS 查询当前员工身份。未绑定时只提示用户在 SaaS 账户页生成绑定码，再发送“绑定 8 位绑定码”。\n2. 不得根据用户自称的姓名、工号或角色切换身份，不得查询或泄露权限范围外的数据，不得展示 API Key、钉钉 ID、token、内部 URL 或工作流配置。\n3. 主管审批必须调用 SaaS 工具，后端会校验当前发送者是不是该申请的直属主管。\n制度、知识库和文件：\n4. 以下问题必须先调用知识库检索工具：公司制度、假期规则、公司内部缩写、简称、陌生术语、内部说法、指定知识库文档的内容。即使缩写或术语含义不明确，也必须把用户原问题原样检索，不能先凭模型常识判断“没有明确含义”。\n5. 用户询问“知识库有哪些文件”“是否包含某个文件”“某文件是否已导入”或要求核对文件名时，必须调用知识库文件目录工具。根据 exists、files 和 count 回答；不得声称知识库工具无法核对目录或文件名。\n6. 知识库检索返回 found 大于 0 时，只依据 context 回答，并以“来源：文件名”标注 sources；found 为 0 时明确说“当前知识库没有相关制度或资料”，不可用常识编造公司内容。\n7. JPG/JPEG/PNG/PDF/DOCX/TXT 由系统入口在调用你之前完成解析。收到“系统已完成附件解析”标记时，必须直接依据 extractedText 回答，严禁再次调用文件解析工具。图片病假材料只提取和整理可见信息，不判断真伪；姓名、日期或休息天数不清晰时要求用户重新上传。默认临时分析；只有用户明确要求“导入知识库”并提供分类和来源时才写入。\n请假：\n8. 先收集假别、开始日期、结束日期、原因；映射 ANNUAL/SICK/PERSONAL/MARRIAGE，日期必须明确。\n9. 参数齐全先调用请假预检，只展示假别、日期、工作日天数、可用余额变化和直属主管，要求回复“确认提交”。\n10. 只有当前消息明确“确认提交”，且本会话最近一次预检参数一致，才调用创建请假单。创建成功只可说明“请假单已提交，主管通知已进入发送队列”，禁止声称主管已经收到。主动通知由独立派发器处理，不由 AI 直接发送。\n11. 主管处理指定编号前必须先调用“请假单真实状态”或“主管待审批列表”。仅状态为 PENDING_MANAGER 时才调用主管审批工具；如果已是 APPROVED、REJECTED 或 PENDING_HR，必须如实回复 SaaS 当前状态，不得重复审批。\n12. 主管审批工具成功后自动 HR 备案。只能依据工具返回的 status、statusLabel 和 alreadyProcessed 说明结果；通知由系统队列处理，最多说明“结果通知已进入发送队列”，不得声称员工已经收到。\n13. 用户问“我的请假”“待办”“某个申请怎么样了”时，必须调用相应 SaaS 查询工具获取最新状态，不能根据之前对话推断。\n14. 余额按工作日计算，周末不扣假，重复日期和余额不足由 SaaS 拒绝。任何工具返回 success=false 或 HTTP 错误时逐字说明 message，不得笼统改写成日期错误或系统异常。\n\n个人信息与在职证明：\n15. 用户询问本人个人信息时，必须调用“本人个人档案”工具获取最新数据。只能回答当前已验证用户本人的信息；不要主动展示用户没有询问的证件掩码、电话或邮箱，不得索取或猜测完整证件号码。\n16. 创建证明前收集证明类型、语言、用途、是否显示薪资和补充说明。签证证明还必须收集目的国家或地区、领事馆或受理机构。类型映射为 STANDARD/VISA，语言映射为 CHINESE/ENGLISH/BILINGUAL。\n17. 参数齐全后先复述申请摘要，并要求用户明确回复“确认提交证明申请”。只有当前消息明确确认且参数与最近一次摘要一致时，才调用创建证明申请工具。不得把普通的“好的”“可以”当作确认。\n18. 创建成功只说明申请编号、类型和“待 HR 审核”，不得声称证明已经生成。用户询问证明进度、审核结果或历史申请时，必须调用“我的证明申请”工具获取 SaaS 最新状态，不能依赖聊天记忆。\n19. 证明工具只操作当前已验证用户本人，不接受姓名、工号或员工 ID 来切换申请人。任何工具返回 success=false 或 HTTP 错误时，逐字说明 message，不得伪造申请成功。\n\n回答简洁、专业、先结论后依据。工具已经返回真实结果时，不得用“理论上”“可能”“无法确认”等模糊措辞否定工具结果。\n\n展示格式：\n20. 对个人信息、工资、假期余额、请假状态和政策信息等结构化结果，使用简洁 Markdown：先给一句明确结论；关键状态、部门、币种等短字段用行内代码标签，例如 `在职`、`研发中心`、`CNY`、`待审核`；三个及以上同类字段优先用表格；需要用户操作时再给简短步骤。\n21. 不得输出 HTML、JSON 或装饰性符号，不得为了排版重复同一信息。字段较少时不要强行使用表格。钉钉和网页端必须使用相同内容，确保纯 Markdown 下仍然清晰可读。\n22. 本人个人信息固定按以下顺序展示：第一行写姓名，并紧跟在职状态、部门、岗位三个行内代码标签；随后使用“字段 | 内容”两列表格，按用户问题选择工号、入职日期、直属主管、工作地点、用工类型、合同日期等字段。未被用户询问的电话、邮箱和证件信息不要展示。\n\n工资查询：\n23. 用户询问本人工资、薪资或月薪时，必须调用“本人个人档案”工具获取最新数据。只能回答工具返回的 monthlySalary 和 currency，并明确这是税前月薪；字段为空时说明“HR 尚未维护工资数据”，不得估算、换算或编造税后工资、实发工资、年薪、奖金和历史工资。\n24. 本人工资查询固定输出两行：第一行“**税前月薪** `币种 金额`”，金额使用千位分隔符且不补无意义的小数；第二行说明数据来自当前 SaaS 个人档案，不包含税后、实发、奖金或历史薪资。不要用表格。\n25. 工资属于本人敏感信息。只能向当前已验证用户回答其本人数据，不得接受姓名、工号、员工 ID 或管理角色作为查询他人工资的依据。用户询问他人工资时直接拒绝，并说明只能查询本人。\n\n新员工入职：\n26. 用户询问入职手续、入职准备、入职流程或入职进度时，必须先调用“当前员工身份”工具。只有工具返回 role=NEW_HIRE 时，才提供实际入职入口；不得根据用户自称的新员工身份判断。普通员工、主管和 HR 只能获得一般流程说明，不得触发或代办新员工入职申请。\n27. 新入职员工办理流程固定为：准备身份证明、银行卡、学历证明和证件照；打开 SaaS 入职办理页；填写并提交登记表；等待 HR 一次审核；在智能体中查询最新结果。实际表单地址为 http://localhost:5173/onboarding 。不要在聊天中收集完整身份证号、银行卡号、紧急联系人等整套敏感表单。\n28. 新入职员工询问入职进度、审核结果或历史申请时，必须调用“我的入职申请”工具读取 SaaS 最新状态，不得依据聊天记忆推断。没有申请时说明尚未提交，并提供 SaaS 入职办理页；PENDING_HR 显示“待 HR 审核”；APPROVED 显示“审核通过”；REJECTED 显示驳回原因并提示修改后重新提交。\n29. 入职申请只在 SaaS 页面创建，智能体不创建或修改申请。审核通过仅表示该入职登记审核完成，不得声称已经转为正式员工或已经覆盖正式员工档案。\n30. 对 role=NEW_HIRE 的入职相关回复（包括入职流程、准备事项、提交申请、审核进度和审核结果），在回答完业务内容后必须追加固定指引：报到时请到直属上级处领取工牌和办公用品；如暂不清楚直属上级，请联系 HR。不得声称系统已经办理领用或存在未配置的具体领取地点。"
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3.1,
+        "position": [
+          736,
+          32
+        ],
+        "id": "fc8d6443-8bf7-4631-907d-e1797cf90a42",
+        "name": "AI Agent",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "options": {
+            "maxRetries": 5
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatDeepSeek",
+        "typeVersion": 1,
+        "position": [
+          160,
+          160
+        ],
+        "id": "1415096e-6689-4465-a731-4b68f43d8c47",
+        "name": "DeepSeek Chat Model",
+        "credentials": {
+          "deepSeekApi": {
+            "id": "uT9eEpALNne1kXnJ",
+            "name": "DeepSeek account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "sessionIdType": "customKey",
+          "sessionKey": "={{ $('Webhook').first().json.body.senderId }}",
+          "contextWindowLength": 12
+        },
+        "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+        "typeVersion": 1.4,
+        "position": [
+          320,
+          176
+        ],
+        "id": "bca3289a-e712-4c7a-b66e-ad78fd5fbf43",
+        "name": "Simple Memory"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $('Webhook').first().json.body.sessionWebhook }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({msgtype:'text',text:{content:$json.replyText,},}) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          640,
+          0
+        ],
+        "id": "0410d369-37e4-40ed-8987-29a20dd0cf36",
+        "name": "Reply to DingTalk",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "查询当前钉钉发送者对应的 SaaS 员工档案。必须先调用，不接受员工编号。",
+          "method": "GET",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/me' }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          560,
+          240
+        ],
+        "id": "c0c3b4f8-6c94-4bc4-bc8a-1fcf7a9b161e",
+        "name": "SaaS Current Employee"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "查询当前已绑定员工自己的四类假期余额，包含已用、审批中占用和可用余额。不得传入其他员工编号。",
+          "method": "GET",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/balances' }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          720,
+          240
+        ],
+        "id": "0ed2a8f1-8c50-42e7-99fa-fd5ff1c10ca0",
+        "name": "SaaS My Leave Balances"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "预检当前员工的请假申请，只校验不创建。若返回 success=false，必须逐字告知 message，不得改写为日期错误或系统异常。",
+          "method": "POST",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/leave/preview' }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({leaveType:$fromAI('leaveType','ANNUAL、SICK、PERSONAL 或 MARRIAGE','string'),startDate:$fromAI('startDate','YYYY-MM-DD','string'),endDate:$fromAI('endDate','YYYY-MM-DD','string'),reason:$fromAI('reason','请假原因','string'),}) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          880,
+          240
+        ],
+        "id": "cddc86c6-7e78-4ef6-8417-8e6f5ef0c5b2",
+        "name": "SaaS Leave Preview"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "创建真实请假单。仅当当前消息明确确认提交且参数与最近一次预检一致时调用。",
+          "method": "POST",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/leave/requests' }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({leaveType:$fromAI('leaveType','上次预检中的假别','string'),startDate:$fromAI('startDate','上次预检中的开始日期','string'),endDate:$fromAI('endDate','上次预检中的结束日期','string'),reason:$fromAI('reason','上次预检中的原因','string'),}) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          1040,
+          240
+        ],
+        "id": "e7c76c22-a915-4a11-9c62-56f807390af2",
+        "name": "SaaS Create Leave"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "主管处理请假单。必须先查询该编号真实状态；仅 PENDING_MANAGER 且当前发送者明确同意或拒绝时调用。后端校验直属主管权限，成功后自动 HR 备案并把员工结果通知写入发送队列。",
+          "method": "POST",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/leave/requests/' + $fromAI('requestId','请假编号','number') + '/review' }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({approved:$fromAI('approved','true 表示同意，false 表示拒绝','boolean'),opinion:$fromAI('opinion','主管意见，可为空','string'),}) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          1200,
+          240
+        ],
+        "id": "f6fd5068-f16e-45a7-bf65-22e3e1de8410",
+        "name": "SaaS Manager Review"
+      },
+      {
+        "parameters": {
+          "descriptionType": "manual",
+          "toolDescription": "检索当前 Demo 企业的 Qdrant 知识库。公司制度、假期规则、内部缩写、简称、陌生术语、内部说法和指定文档内容必须先调用。把用户原问题完整传入；根据 context 回答并引用 sources。found 为 0 时明确说明当前知识库没有相关制度或资料，不得用模型常识编造。",
+          "method": "POST",
+          "url": "http://localhost:5678/webhook/hragent-knowledge-search",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({ question: $fromAI('question', '用户提出的完整原问题，不要自行改写或省略缩写', 'string') }) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          },
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-HRAgent-Internal-Key",
+                "value": "={{ $env.WEB_ATTACHMENT_INTERNAL_KEY }}"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          560,
+          400
+        ],
+        "id": "be9e6848-45e4-4e50-960e-eeb87536ce30",
+        "name": "Query Policy Knowledge"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "查询当前员工自己的最近请假申请及 SaaS 最新状态。用户询问我的请假、审批进度或历史申请时必须调用，不得依赖聊天记忆。",
+          "method": "GET",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/leave/requests' }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          1200,
+          400
+        ],
+        "id": "41eb88b0-3436-45ac-9a6e-9634a183b4b1",
+        "name": "SaaS My Leave Requests"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "查询当前主管或 HR 在 SaaS 中的真实待办列表。主管同意或拒绝前必须先调用；空列表表示没有待处理申请。",
+          "method": "GET",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/leave/pending' }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          1360,
+          400
+        ],
+        "id": "278b283e-4c1c-4ae8-847a-23246f1130c5",
+        "name": "SaaS Pending Leave Approvals"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "按编号查询请假单在 SaaS 中的真实最新状态。只有申请人、直属主管或 HR 可见。审批前和用户询问指定编号时必须调用。",
+          "method": "GET",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/leave/requests/' + $fromAI('requestId','请假编号','number') }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          1520,
+          400
+        ],
+        "id": "e3051ee6-8813-4ed9-a0ca-c01e705389c0",
+        "name": "SaaS Leave Request Status"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              },
+              {
+                "name": "X-DingTalk-Staff-Id",
+                "value": "={{ $('Webhook').first().json.body.senderStaffId }}"
+              }
+            ]
+          },
+          "description": "用一次性 8 位绑定码把当前钉钉发送者绑定到当前空间员工档案，只在用户明确提供绑定码时使用。",
+          "method": "POST",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/identity/bind' }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({code:$fromAI('code','用户明确提供的 8 位绑定码','string'),}) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          1040,
+          400
+        ],
+        "id": "b1d7fd54-d2f8-4f57-9ceb-9e35b5deee72",
+        "name": "SaaS Bind DingTalk Identity"
+      },
+      {
+        "parameters": {
+          "jsCode": "const output = typeof $json.output === 'string' ? $json.output.trim() : '';\nconst errorMessage = String($json.error?.message || $json.error || '').trim();\nlet replyText = output;\nif (!replyText && errorMessage) {\n  if (/service unavailable|temporarily unavailable|503|timeout|timed out|ECONNRESET|ETIMEDOUT/i.test(errorMessage)) {\n    replyText = 'DeepSeek 服务暂时不可用，系统已自动重试；请稍后重新发送。';\n  } else {\n    replyText = '智能体处理失败，请稍后重试。错误信息：' + errorMessage.slice(0, 180);\n  }\n}\nreplyText = replyText || '本次处理没有得到有效结果，请稍后重试；如持续失败，请联系系统管理员。';\nreturn [{ json: { replyText } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          992,
+          32
+        ],
+        "id": "c0fb2e4a-0c3e-4c47-a7d7-2be98c7fa140",
+        "name": "Prepare DingTalk Reply"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "dddff7e5-b973-46f1-b304-b1004b7f2c0c",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                },
+                "leftValue": "={{ ['file', 'picture'].includes(String($json.body?.msgtype || '').toLowerCase()) ? 'attachment' : 'text' }}",
+                "rightValue": "attachment"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          224,
+          0
+        ],
+        "id": "be48f9d3-52a1-40d6-b3ef-78e2bf6b66b1",
+        "name": "Route DingTalk Message"
+      },
+      {
+        "parameters": {
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "value": "3RiI6nH28eRUuOaz",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/3RiI6nH28eRUuOaz",
+            "cachedResultName": "HRAgent-03-DingTalk-File-Parser"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "downloadCode": "={{ $json.body?.content?.downloadCode || $json.body?.content?.pictureDownloadCode || '' }}",
+              "robotCode": "={{ $json.body?.robotCode || '' }}",
+              "fileName": "={{ $json.body?.content?.fileName || ($json.body?.msgtype === 'picture' ? 'dingtalk-image.jpg' : '未命名文件') }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "downloadCode",
+                "displayName": "downloadCode",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "robotCode",
+                "displayName": "robotCode",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "fileName",
+                "displayName": "fileName",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "mode": "once",
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          480,
+          -128
+        ],
+        "id": "542793bb-502b-4613-a1ee-d5dfafd52aec",
+        "name": "Parse DingTalk Attachment",
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const message = String($json.error?.message || $json.message || '');\nlet detail = '请重新上传一次清晰的 JPG、JPEG、PNG、PDF、DOCX 或 TXT 文件。';\n\nif (/downloadCode|MissingdownloadCode/i.test(message)) {\n  detail = '没有取得钉钉附件下载凭证，请重新发送原文件或图片。';\n} else if (/unsupported|不支持/i.test(message)) {\n  detail = '当前仅支持 JPG、JPEG、PNG、PDF、DOCX 和 TXT 格式。';\n} else if (/OCR|可读文字|No searchable text/i.test(message)) {\n  detail = '图片中没有识别到清晰文字，请换一张更清晰的图片后重试。';\n}\n\nreturn [{ json: { output: '文件解析失败：' + detail } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          720,
+          -256
+        ],
+        "id": "ff1514aa-dfd8-4c1c-b8b4-e07837f4962b",
+        "name": "Prepare Attachment Error"
+      },
+      {
+        "parameters": {
+          "descriptionType": "manual",
+          "toolDescription": "列出当前 Demo 企业知识库的文件名，或精确核对指定文件是否存在。用户询问知识库目录、有哪些文件、是否包含某文件、某文件是否已导入时必须调用。根据 exists、files 和 count 回答，不得猜测。",
+          "method": "POST",
+          "url": "http://localhost:5678/webhook/hragent-knowledge-files",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-HRAgent-Internal-Key",
+                "value": "={{ $env.WEB_ATTACHMENT_INTERNAL_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({ filename: $fromAI('filename', '要核对的完整文件名；如果用户要求列出全部文件则传空字符串', 'string') }) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          780,
+          400
+        ],
+        "id": "0dbbe9bd-93fb-47fd-a6d8-41cbbe80f558",
+        "name": "List Knowledge Files"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "查询当前已验证用户本人的个人档案。用户询问本人姓名、工号、部门、岗位、入职日期、合同、工作地点、税前月薪、币种或证件信息时调用。不接受员工编号，不能查询其他人；证件号码只返回掩码。",
+          "method": "GET",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/personal-profile' }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          720,
+          560
+        ],
+        "id": "3bd2ef92-a6d0-43d2-b583-cf4c0af08211",
+        "name": "SaaS My Personal Profile"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "为当前已验证员工创建真实在职证明申请。必须先收集完整参数并让用户明确回复“确认提交证明申请”后调用。STANDARD 为标准证明；VISA 为出境或签证证明。若系统上下文提供员工刚上传的证明模板 ID，必须将该 ID 传入 requestedTemplateId；不得替其他员工申请。",
+          "method": "POST",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/certificates/requests' }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({certificateType:$fromAI('certificateType','STANDARD 表示标准在职证明，VISA 表示出境或签证在职证明','string'),language:$fromAI('language','CHINESE、ENGLISH 或 BILINGUAL','string'),purpose:$fromAI('purpose','证明用途','string'),destinationCountry:$fromAI('destinationCountry','VISA 必填；STANDARD 传空字符串','string'),consulateName:$fromAI('consulateName','VISA 必填；STANDARD 传空字符串','string'),includeSalary:$fromAI('includeSalary','是否在证明中显示薪资，true 或 false','boolean'),remarks:$fromAI('remarks','补充说明；没有则传空字符串','string'),requestedTemplateId:$fromAI('requestedTemplateId','系统上下文提供的员工模板 ID；没有模板时传空值','number')}) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          880,
+          560
+        ],
+        "id": "de704abe-3d4c-47fc-a30c-a9a132c83c89",
+        "name": "SaaS Create Certificate Request"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "查询当前已验证员工自己的在职证明申请和最新状态。用户询问证明进度、审核结果、历史申请或文件是否生成时必须调用，不得根据聊天记忆推断。",
+          "method": "GET",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/certificates/requests' }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          1040,
+          560
+        ],
+        "id": "547e65c2-0d97-4517-9329-6f4cf71dbf36",
+        "name": "SaaS My Certificate Requests"
+      },
+      {
+        "parameters": {
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-API-Key",
+                "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+              },
+              {
+                "name": "X-DingTalk-User-Id",
+                "value": "={{ $('Webhook').first().json.body.senderId }}"
+              }
+            ]
+          },
+          "description": "查询当前已验证新入职员工自己的入职申请和最新审核状态。仅当当前员工身份工具返回 role=NEW_HIRE，且用户询问入职进度、审核结果或历史申请时调用；不得查询其他人，不得根据聊天记忆推断状态。",
+          "method": "GET",
+          "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/onboarding/requests' }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          1200,
+          560
+        ],
+        "id": "a7d0c188-5a91-46db-b998-7fb270e0a9c1",
+        "name": "SaaS My Onboarding Requests"
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Route DingTalk Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent": {
+        "main": [
+          [
+            {
+              "node": "Prepare DingTalk Reply",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DeepSeek Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Simple Memory": {
+        "ai_memory": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_memory",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS Current Employee": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS My Leave Balances": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS Leave Preview": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS Create Leave": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS Manager Review": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Query Policy Knowledge": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS Bind DingTalk Identity": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS My Leave Requests": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS Pending Leave Approvals": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS Leave Request Status": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare DingTalk Reply": {
+        "main": [
+          [
+            {
+              "node": "Reply to DingTalk",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route DingTalk Message": {
+        "main": [
+          [
+            {
+              "node": "Parse DingTalk Attachment",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "AI Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse DingTalk Attachment": {
+        "main": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Attachment Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Attachment Error": {
+        "main": [
+          [
+            {
+              "node": "Prepare DingTalk Reply",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "List Knowledge Files": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS My Personal Profile": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS Create Certificate Request": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS My Certificate Requests": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SaaS My Onboarding Requests": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate",
+      "errorWorkflow": "e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17",
+      "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": {
+      "templateCredsSetupCompleted": true,
+      "instanceId": "f22f13fd6ced2133a6235977f8a116a738efe75389381d070dac7e8ce27dea39"
+    },
+    "nodeGroups": [],
+    "pinData": {},
+    "versionId": "60d5038b-e828-434a-b9c8-e298e3a10239",
+    "activeVersionId": "60d5038b-e828-434a-b9c8-e298e3a10239",
+    "versionCounter": 13,
+    "triggerCount": 1,
+    "sourceWorkflowId": null,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-07-21T06:51:29.700Z",
+        "createdAt": "2026-07-21T06:51:29.700Z",
+        "role": "workflow:owner",
+        "workflowId": "LLWdzAOEECp9eSIf",
+        "projectId": "mdZFyQXmS7UPBVz9",
+        "project": {
+          "updatedAt": "2026-07-21T06:45:01.637Z",
+          "createdAt": "2026-07-21T06:31:57.208Z",
+          "id": "mdZFyQXmS7UPBVz9",
+          "name": "123 123 <1280674031@qq.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "customTelemetryTags": [],
+          "creatorId": "10e8321a-a948-4232-95b2-f8f62cf5fe2f"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]

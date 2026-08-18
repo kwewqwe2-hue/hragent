@@ -1,0 +1,255 @@
+{
+  "id": "c4e6a8b0-2d1f-4c93-8e75-1a6b9d0f2c34",
+  "name": "HRAgent-RAG-Search",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hragent-knowledge-search",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "1a2b3c4d-5e6f-4789-ab01-234567890abc",
+      "name": "Knowledge Search Webhook",
+      "webhookId": "2b3c4d5e-6f70-489a-bc12-34567890abcd"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const expected = String($env.WEB_ATTACHMENT_INTERNAL_KEY || '');\nconst supplied = String($json.headers?.['x-hragent-internal-key'] || '');\nif (!expected || supplied !== expected) {\n  throw new Error('知识库查询请求未通过内部鉴权');\n}\n\nconst body = $json.body || $json;\nconst question = String(body.question || body.chatInput || '').trim();\nif (!question) throw new Error('question is required');\nreturn [{ json: { question } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "3c4d5e6f-7081-49ab-cd23-4567890abcde",
+      "name": "Normalize Knowledge Question"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/api/embeddings",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ model: 'bge-m3', prompt: $json.question }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        520,
+        0
+      ],
+      "id": "4d5e6f70-8192-4abc-de34-567890abcdef",
+      "name": "Create Query Embedding"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/hragent_knowledge/points/query",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ query: $json.embedding, limit: 4, score_threshold: 0.5, with_payload: true, with_vector: false }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        800,
+        0
+      ],
+      "id": "5e6f7081-92a3-4bcd-ef45-67890abcdef0",
+      "name": "Search Qdrant Knowledge"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const MIN_SCORE = 0.5;\nconst points = Array.isArray($json.result?.points) ? $json.result.points : [];\nconst results = points.map((point) => {\n  const payload = point.payload || {};\n  const metadata = payload.metadata || {};\n  const location = String(metadata.filter_by_filename || payload.filter_by_filename || '').trim();\n  const source = location.split('/').pop() || '\\u672a\\u547d\\u540d\\u6587\\u4ef6';\n  const content = String(payload.content || payload.pageContent || payload.text || '').trim();\n  const score = Number(point.score);\n  return { source, score, content };\n}).filter((item) => item.content && Number.isFinite(item.score) && item.score >= MIN_SCORE);\n\nreturn [{\n  json: {\n    success: true,\n    found: results.length,\n    sources: results.map((item) => item.source),\n    results,\n    context: results.map((item) => '\\u6765\\u6e90\\u6587\\u4ef6\\uff1a' + item.source + '\\\\n' + item.content).join('\\\\n\\\\n'),\n    minScore: MIN_SCORE,\n    message: results.length ? '\\u5df2\\u627e\\u5230\\u76f8\\u5173\\u5236\\u5ea6' : '\\u5f53\\u524d\\u77e5\\u8bc6\\u5e93\\u6ca1\\u6709\\u76f8\\u5173\\u5236\\u5ea6',\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        0
+      ],
+      "id": "6f708192-a3b4-4cde-f567-890abcdef012",
+      "name": "Format Knowledge Results"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hragent-knowledge-files",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "id": "1f24f2e7-87c3-4cc6-b623-3cf40f7680f1",
+      "name": "Knowledge Files Webhook",
+      "webhookId": "6c70491b-4fce-4b81-a604-38576bc02455"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const expected = String($env.WEB_ATTACHMENT_INTERNAL_KEY || '');\nconst supplied = String($json.headers?.['x-hragent-internal-key'] || '');\nif (!expected || supplied !== expected) {\n  throw new Error('知识库目录请求未通过内部鉴权');\n}\n\nconst body = $json.body || $json;\nreturn [{ json: { filename: String(body.filename || '').trim() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "id": "7e114fa9-18fc-4f23-b637-0fde0ad43f41",
+      "name": "Normalize Knowledge File Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/hragent_knowledge/points/scroll",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ limit: 1000, with_payload: true, with_vector: false }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        520,
+        300
+      ],
+      "id": "961540ed-8c8a-4e1c-8f2b-7b4380f09e45",
+      "name": "Scroll Knowledge Files"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const requested = String($('Normalize Knowledge File Request').first().json.filename || '').trim();\nconst requestedBase = requested.replace(/\\\\/g, '/').split('/').pop().toLocaleLowerCase('zh-CN');\nconst points = Array.isArray($json.result?.points) ? $json.result.points : [];\nconst names = points.map((point) => {\n  const payload = point.payload || {};\n  const metadata = payload.metadata || {};\n  const location = String(metadata.filter_by_filename || payload.filter_by_filename || '').trim();\n  return location.replace(/\\\\/g, '/').split('/').pop();\n}).filter(Boolean);\nconst files = [...new Set(names)].sort((a, b) => a.localeCompare(b, 'zh-CN'));\nconst exists = requested\n  ? files.some((name) => name.toLocaleLowerCase('zh-CN') === requestedBase)\n  : null;\nreturn [{ json: {\n  success: true,\n  mode: requested ? 'exists' : 'list',\n  requestedFilename: requested,\n  exists,\n  count: files.length,\n  files,\n  message: requested\n    ? (exists ? '知识库中存在文件：' + requested : '知识库中不存在文件：' + requested)\n    : '知识库中共有 ' + files.length + ' 个文件',\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        300
+      ],
+      "id": "ce40be50-1a82-4c59-8e21-88a3f013f333",
+      "name": "Format Knowledge File List"
+    }
+  ],
+  "connections": {
+    "Knowledge Search Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Knowledge Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Knowledge Question": {
+      "main": [
+        [
+          {
+            "node": "Create Query Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Query Embedding": {
+      "main": [
+        [
+          {
+            "node": "Search Qdrant Knowledge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Qdrant Knowledge": {
+      "main": [
+        [
+          {
+            "node": "Format Knowledge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Knowledge Files Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Knowledge File Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Knowledge File Request": {
+      "main": [
+        [
+          {
+            "node": "Scroll Knowledge Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scroll Knowledge Files": {
+      "main": [
+        [
+          {
+            "node": "Format Knowledge File List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17"
+  },
+  "staticData": null,
+  "pinData": {},
+  "tags": []
+}

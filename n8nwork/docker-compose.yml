@@ -1,0 +1,178 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hragent-n8n-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: n8n
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: ${N8N_POSTGRES_PASSWORD}
+    volumes:
+      - n8n-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n -d n8n"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.3
+    container_name: hragent-n8n-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  ollama:
+    image: ollama/ollama:0.32.5
+    container_name: hragent-n8n-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      HTTP_PROXY: ${OLLAMA_HTTP_PROXY:-http://http.docker.internal:3128}
+      HTTPS_PROXY: ${OLLAMA_HTTPS_PROXY:-http://http.docker.internal:3128}
+      NO_PROXY: localhost,127.0.0.1,ollama,n8n,qdrant,postgres,host.docker.internal
+      http_proxy: ${OLLAMA_HTTP_PROXY:-http://http.docker.internal:3128}
+      https_proxy: ${OLLAMA_HTTPS_PROXY:-http://http.docker.internal:3128}
+      no_proxy: localhost,127.0.0.1,ollama,n8n,qdrant,postgres,host.docker.internal
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
+  pdf-parser:
+    image: n8nio/n8n:2.29.11
+    container_name: hragent-n8n-pdf-parser
+    restart: unless-stopped
+    entrypoint: ["tini", "--"]
+    command: ["node", "/pdf-parser/server.mjs"]
+    volumes:
+      - ./pdf-parser:/pdf-parser:ro
+      - ./knowledge-files:/knowledge-files
+
+  ocr:
+    build:
+      context: ./ocr-service
+    container_name: hragent-n8n-ocr
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  n8n:
+    image: n8nio/n8n:2.29.11
+    container_name: hragent-n8n
+    restart: unless-stopped
+    env_file:
+      - ./saas-agent.env
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-http://localhost:5678}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}
+      N8N_DEFAULT_BINARY_DATA_MODE: filesystem
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      N8N_RESTRICT_FILE_ACCESS_TO: /knowledge-files
+      HTTP_PROXY: ${N8N_HTTP_PROXY:-http://host.docker.internal:7897}
+      HTTPS_PROXY: ${N8N_HTTPS_PROXY:-http://host.docker.internal:7897}
+      NO_PROXY: localhost,127.0.0.1,n8n,qdrant,ollama,postgres,pdf-parser,ocr,hragent-backend,hragent-frontend,hragent-chat,host.docker.internal,api.deepseek.com
+      http_proxy: ${N8N_HTTP_PROXY:-http://host.docker.internal:7897}
+      https_proxy: ${N8N_HTTPS_PROXY:-http://host.docker.internal:7897}
+      no_proxy: localhost,127.0.0.1,n8n,qdrant,ollama,postgres,pdf-parser,ocr,hragent-backend,hragent-frontend,hragent-chat,host.docker.internal,api.deepseek.com
+      GENERIC_TIMEZONE: Asia/Shanghai
+      TZ: Asia/Shanghai
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      KNOWLEDGE_STORAGE_PATH: ${KNOWLEDGE_STORAGE_PATH:-/knowledge-files}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-bge-m3}
+      WEB_ATTACHMENT_INTERNAL_KEY: ${HRAGENT_WEB_ATTACHMENT_INTERNAL_KEY:-local-demo-web-attachment-internal-key-change-me}
+      DINGTALK_APP_KEY: ${DINGTALK_APP_KEY:-}
+      DINGTALK_APP_SECRET: ${DINGTALK_APP_SECRET:-}
+      DINGTALK_APPROVAL_BASE_URL: ${DINGTALK_APPROVAL_BASE_URL:-}
+      SAAS_BASE_URL: ${SAAS_BASE_URL:-http://hragent-backend:8080/api}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      # DingTalk currently advertises IPv6 first, but this Docker network has no IPv6 route.
+      - "oapi.dingtalk.com:106.11.43.136"
+      - "api.dingtalk.com:106.11.43.160"
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+      - ./knowledge-files:/knowledge-files
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_started
+      pdf-parser:
+        condition: service_started
+      ocr:
+        condition: service_healthy
+
+  n8n-import:
+    image: n8nio/n8n:2.29.11
+    profiles: ["tools"]
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+    command: import:workflow --separate --input=/workflows
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: hragent-cloudflared
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TUNNEL_TOKEN}
+    depends_on:
+      - n8n
+
+  cloudflared-quick:
+    image: cloudflare/cloudflared:latest
+    container_name: hragent-cloudflared-quick
+    profiles: ["quick-tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://n8n:5678
+    environment:
+      HTTP_PROXY: ${N8N_HTTP_PROXY:-http://host.docker.internal:7897}
+      HTTPS_PROXY: ${N8N_HTTPS_PROXY:-http://host.docker.internal:7897}
+      NO_PROXY: localhost,127.0.0.1,n8n,host.docker.internal
+      http_proxy: ${N8N_HTTP_PROXY:-http://host.docker.internal:7897}
+      https_proxy: ${N8N_HTTPS_PROXY:-http://host.docker.internal:7897}
+      no_proxy: localhost,127.0.0.1,n8n,host.docker.internal
+    depends_on:
+      - n8n
+
+volumes:
+  n8n-data:
+  n8n-postgres-data:
+  qdrant-data:
+  ollama-data:

@@ -1,0 +1,997 @@
+{
+    "id":  "d5e6f7a8-9012-4b3c-8d5e-6f708192a3b4",
+    "name":  "HRAgent-RAG-Ingest",
+    "active":  true,
+    "nodes":  [
+                  {
+                      "id":  "7ab0e284-b667-4d1f-8ceb-fb05e4081a06",
+                      "name":  "Set Variables",
+                      "type":  "n8n-nodes-base.set",
+                      "position":  [
+                                       840,
+                                       700
+                                   ],
+                      "parameters":  {
+                                         "options":  {
+                                                         "includeBinary":  true
+                                                     },
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "35ea70c4-8669-4975-a68d-bbaa094713c0",
+                                                                                     "name":  "directory",
+                                                                                     "type":  "string",
+                                                                                     "value":  "/knowledge-files"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "1d081d19-ff4e-462a-9cbe-7af2244bf87f",
+                                                                                     "name":  "fileName",
+                                                                                     "type":  "string",
+                                                                                     "value":  "={{ (($binary.data.fileName || \u0027upload.bin\u0027).replace(/[\\\\/]/g, \u0027_\u0027).replace(/\\.\\./g, \u0027_\u0027)) }}"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "18f8dc19-ff4e-462a-9cbe-7af2244bf87f",
+                                                                                     "name":  "file_added",
+                                                                                     "type":  "string",
+                                                                                     "value":  ""
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "65074ff7-037b-4b3b-b2c3-8a61755ab43b",
+                                                                                     "name":  "file_changed",
+                                                                                     "type":  "string",
+                                                                                     "value":  "={{ \u0027/knowledge-files/\u0027 + (($binary.data.fileName || \u0027upload.bin\u0027).replace(/[\\\\/]/g, \u0027_\u0027).replace(/\\.\\./g, \u0027_\u0027)) }}"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "9a1902e7-f94d-4d1f-9006-91c67354d3e8",
+                                                                                     "name":  "file_deleted",
+                                                                                     "type":  "string",
+                                                                                     "value":  ""
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "2bd4e9e1-8d0a-4ac4-a1f6-7bfc5a44f9c1",
+                                                                                     "name":  "fileExtension",
+                                                                                     "type":  "string",
+                                                                                     "value":  "={{ (($binary.data.fileName || \u0027upload.bin\u0027).split(\u0027.\u0027).pop().toLowerCase()) }}"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "b6b1c6f2-3a0a-4e6f-9a8c-6f9f87d8d4f1",
+                                                                                     "name":  "qdrant_collection",
+                                                                                     "type":  "string",
+                                                                                     "value":  "hragent_knowledge"
+                                                                                 }
+                                                                             ]
+                                                         }
+                                     },
+                      "typeVersion":  3.3
+                  },
+                  {
+                      "id":  "f82f6de0-af8f-4fdf-a733-f59ba4fed02f",
+                      "name":  "Read File",
+                      "type":  "n8n-nodes-base.readWriteFile",
+                      "position":  [
+                                       1340,
+                                       1120
+                                   ],
+                      "parameters":  {
+                                         "options":  {
+
+                                                     },
+                                         "fileSelector":  "={{ $( \u0027Set Variables\u0027 ).item.json.file_changed || $( \u0027Set Variables\u0027 ).item.json.file_added }}"
+                                     },
+                      "typeVersion":  1
+                  },
+                  {
+                      "id":  "7354a080-051b-479f-97b1-49cc0c14c9d8",
+                      "name":  "Embeddings Ollama - Ingestion",
+                      "type":  "@n8n/n8n-nodes-langchain.embeddingsOllama",
+                      "position":  [
+                                       1720,
+                                       1280
+                                   ],
+                      "parameters":  {
+                                         "model":  "bge-m3",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "credentials":  {
+                                          "ollamaApi":  {
+                                                            "id":  "OllamaBgeM3Local",
+                                                            "name":  "Ollama Local bge-m3"
+                                                        }
+                                      },
+                      "typeVersion":  1
+                  },
+                  {
+                      "id":  "a1ad45ff-a882-4aed-82e2-cad2483cf4e8",
+                      "name":  "Default Data Loader",
+                      "type":  "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+                      "position":  [
+                                       1820,
+                                       1280
+                                   ],
+                      "parameters":  {
+                                         "options":  {
+                                                         "metadata":  {
+                                                                          "metadataValues":  [
+                                                                                                 {
+                                                                                                     "name":  "filter_by_filename",
+                                                                                                     "value":  "={{ $json.file_location }}"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "filter_by_created_month",
+                                                                                                     "value":  "={{ $now.year + \u0027-\u0027 + $now.monthShort }}"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "filter_by_created_week",
+                                                                                                     "value":  "={{ $now.year + \u0027-\u0027 + $now.monthShort + \u0027-W\u0027 + $now.weekNumber }}"
+                                                                                                 }
+                                                                                             ]
+                                                                      }
+                                                     },
+                                         "jsonData":  "={{ $json.data }}",
+                                         "jsonMode":  "expressionData"
+                                     },
+                      "typeVersion":  1
+                  },
+                  {
+                      "id":  "0b0e29b9-8873-4074-94dc-9f0364c28835",
+                      "name":  "Recursive Character Text Splitter",
+                      "type":  "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+                      "position":  [
+                                       1840,
+                                       1400
+                                   ],
+                      "parameters":  {
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "typeVersion":  1
+                  },
+                  {
+                      "id":  "e5664534-de07-481f-87dd-68d7d0715baa",
+                      "name":  "Remap for File_Added Flow",
+                      "type":  "n8n-nodes-base.set",
+                      "position":  [
+                                       1920,
+                                       700
+                                   ],
+                      "parameters":  {
+                                         "options":  {
+
+                                                     },
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "840219e1-ed47-4b00-83fd-6b3c0bd71650",
+                                                                                     "name":  "file_added",
+                                                                                     "type":  "string",
+                                                                                     "value":  "={{ $(\u0027Set Variables\u0027).item.json.file_changed }}"
+                                                                                 }
+                                                                             ]
+                                                         }
+                                     },
+                      "typeVersion":  3.3
+                  },
+                  {
+                      "id":  "b0fa4fa4-5d1b-4a12-b8ba-a10d71f31f94",
+                      "name":  "Delete Existing Point",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "position":  [
+                                       1720,
+                                       700
+                                   ],
+                      "parameters":  {
+                                         "url":  "=http://qdrant:6333/collections/{{ $(\u0027Set Variables\u0027).item.json.qdrant_collection }}/points/delete",
+                                         "method":  "POST",
+                                         "options":  {
+
+                                                     },
+                                         "sendBody":  true,
+                                         "authentication":  "predefinedCredentialType",
+                                         "bodyParameters":  {
+                                                                "parameters":  [
+                                                                                   {
+                                                                                       "name":  "points",
+                                                                                       "value":  "={{ $json.result.points.map(point =\u003e point.id) }}"
+                                                                                   }
+                                                                               ]
+                                                            },
+                                         "nodeCredentialType":  "qdrantApi"
+                                     },
+                      "credentials":  {
+                                          "qdrantApi":  {
+                                                            "id":  "ChDPz6xXj1Fal8N9",
+                                                            "name":  "Qdrant account"
+                                                        }
+                                      },
+                      "typeVersion":  4.2
+                  },
+                  {
+                      "id":  "5408adfe-4d6b-407c-aac7-e87c9b1a1592",
+                      "name":  "Search For Existing Point1",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "position":  [
+                                       1340,
+                                       700
+                                   ],
+                      "parameters":  {
+                                         "url":  "=http://qdrant:6333/collections/{{ $(\u0027Set Variables\u0027).item.json.qdrant_collection }}/points/scroll",
+                                         "method":  "POST",
+                                         "options":  {
+
+                                                     },
+                                         "jsonBody":  "={\n    \"filter\": {\n        \"must\": [\n            {\n                \"key\": \"metadata.filter_by_filename\",\n                \"match\": {\n                    \"value\": \"{{ $json.file_changed }}\"\n                }\n            }\n        ]\n    },\n    \"limit\": 1000,\n    \"with_payload\": false,\n    \"with_vector\": false\n}",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "authentication":  "predefinedCredentialType",
+                                         "nodeCredentialType":  "qdrantApi"
+                                     },
+                      "credentials":  {
+                                          "qdrantApi":  {
+                                                            "id":  "ChDPz6xXj1Fal8N9",
+                                                            "name":  "Qdrant account"
+                                                        }
+                                      },
+                      "typeVersion":  4.2,
+                      "onError":  "continueRegularOutput"
+                  },
+                  {
+                      "id":  "fac43587-0d24-4d6e-a0d5-8cc8f9615967",
+                      "name":  "Has Existing Point?1",
+                      "type":  "n8n-nodes-base.if",
+                      "position":  [
+                                       1520,
+                                       700
+                                   ],
+                      "parameters":  {
+                                         "options":  {
+
+                                                     },
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "leftValue":  "",
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict"
+                                                                        },
+                                                            "combinator":  "and",
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "0392bac0-8fb5-406b-b59f-575edf5ab30d",
+                                                                                   "operator":  {
+                                                                                                    "type":  "array",
+                                                                                                    "operation":  "notEmpty",
+                                                                                                    "singleValue":  true
+                                                                                                },
+                                                                                   "leftValue":  "={{ $json.result.points }}",
+                                                                                   "rightValue":  ""
+                                                                               }
+                                                                           ]
+                                                        }
+                                     },
+                      "typeVersion":  2
+                  },
+                  {
+                      "id":  "2d6fb29c-2fac-41de-9ad0-cc781b246378",
+                      "name":  "Handle File Event",
+                      "type":  "n8n-nodes-base.switch",
+                      "position":  [
+                                       1000,
+                                       700
+                                   ],
+                      "parameters":  {
+                                         "rules":  {
+                                                       "values":  [
+                                                                      {
+                                                                          "outputKey":  "file_deleted",
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "leftValue":  "",
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "typeValidation":  "strict"
+                                                                                                         },
+                                                                                             "combinator":  "and",
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "a1f6d86a-9805-4d0e-ac70-90c9cf0ad339",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "notEmpty",
+                                                                                                                                     "singleValue":  true
+                                                                                                                                 },
+                                                                                                                    "leftValue":  "={{ $json.file_deleted }}",
+                                                                                                                    "rightValue":  ""
+                                                                                                                }
+                                                                                                            ]
+                                                                                         },
+                                                                          "renameOutput":  true
+                                                                      },
+                                                                      {
+                                                                          "outputKey":  "file_changed",
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "leftValue":  "",
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "typeValidation":  "strict"
+                                                                                                         },
+                                                                                             "combinator":  "and",
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "d15cde67-b5b0-4676-b4fb-ead749147392",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "notEmpty",
+                                                                                                                                     "singleValue":  true
+                                                                                                                                 },
+                                                                                                                    "leftValue":  "={{ $json.file_changed }}",
+                                                                                                                    "rightValue":  ""
+                                                                                                                }
+                                                                                                            ]
+                                                                                         },
+                                                                          "renameOutput":  true
+                                                                      },
+                                                                      {
+                                                                          "outputKey":  "file_added",
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "leftValue":  "",
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "typeValidation":  "strict"
+                                                                                                         },
+                                                                                             "combinator":  "and",
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "notEmpty",
+                                                                                                                                     "singleValue":  true
+                                                                                                                                 },
+                                                                                                                    "leftValue":  "={{ $json.file_added }}",
+                                                                                                                    "rightValue":  ""
+                                                                                                                }
+                                                                                                            ]
+                                                                                         },
+                                                                          "renameOutput":  true
+                                                                      }
+                                                                  ]
+                                                   },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "typeVersion":  3
+                  },
+                  {
+                      "id":  "7b29b0b9-ffee-4456-b036-9b39400d2b31",
+                      "name":  "Qdrant Vector Store",
+                      "type":  "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+                      "position":  [
+                                       1700,
+                                       1120
+                                   ],
+                      "parameters":  {
+                                         "mode":  "insert",
+                                         "options":  {
+
+                                                     },
+                                         "qdrantCollection":  {
+                                                                  "__rl":  true,
+                                                                  "mode":  "id",
+                                                                  "value":  "={{ $(\u0027Set Variables\u0027).item.json.qdrant_collection }}"
+                                                              }
+                                     },
+                      "credentials":  {
+                                          "qdrantApi":  {
+                                                            "id":  "ChDPz6xXj1Fal8N9",
+                                                            "name":  "Qdrant account"
+                                                        }
+                                      },
+                      "typeVersion":  1
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "hragent-knowledge-ingest",
+                                         "responseMode":  "lastNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       -520,
+                                       700
+                                   ],
+                      "id":  "6b7c8d9e-a0b1-4234-cdef-567890abcdef",
+                      "name":  "Knowledge Upload Webhook",
+                      "webhookId":  "7c8d9e0f-a1b2-4345-def0-67890abcdef1"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "write",
+                                         "fileName":  "={{ $json.file_changed }}",
+                                         "dataPropertyName":  "data",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.readWriteFile",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -40,
+                                       700
+                                   ],
+                      "id":  "e7f5bb93-fd37-4683-a42f-bc0b62b15cc6",
+                      "name":  "Write Knowledge File"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "f0a58f5d-bc9c-4d91-9be0-17f4693f3b2f",
+                                                                                     "name":  "directory",
+                                                                                     "type":  "string",
+                                                                                     "value":  "={{ $( \u0027Set Variables\u0027 ).item.json.directory }}"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "a5fbe7a4-0d40-4584-8180-30dbac3a9e23",
+                                                                                     "name":  "fileName",
+                                                                                     "type":  "string",
+                                                                                     "value":  "={{ $( \u0027Set Variables\u0027 ).item.json.fileName }}"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "1e1e4f7a-54b7-4f14-8619-bf011c2af03e",
+                                                                                     "name":  "file_changed",
+                                                                                     "type":  "string",
+                                                                                     "value":  "={{ $( \u0027Set Variables\u0027 ).item.json.file_changed }}"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "e7225bd2-0d2d-472f-aee6-c4adbb0cdbcf",
+                                                                                     "name":  "file_added",
+                                                                                     "type":  "string",
+                                                                                     "value":  ""
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "8ba0fb5f-5fe1-4c9a-91cc-5eb7a0d9d2ee",
+                                                                                     "name":  "qdrant_collection",
+                                                                                     "type":  "string",
+                                                                                     "value":  "={{ $( \u0027Set Variables\u0027 ).item.json.qdrant_collection }}"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.3,
+                      "position":  [
+                                       200,
+                                       700
+                                   ],
+                      "id":  "8c903839-b26b-4054-b3d5-71e5b1a8ac7a",
+                      "name":  "Normalize Upload Metadata"
+                  },
+                  {
+                      "parameters":  {
+                                         "rules":  {
+                                                       "values":  [
+                                                                      {
+                                                                          "outputKey":  "pdf",
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "leftValue":  "",
+                                                                                                             "caseSensitive":  false,
+                                                                                                             "typeValidation":  "strict"
+                                                                                                         },
+                                                                                             "combinator":  "and",
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "7dbf3df0-7a20-48e3-96d4-5c88b0ce33f0",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals",
+                                                                                                                                     "singleValue":  true
+                                                                                                                                 },
+                                                                                                                    "leftValue":  "={{ $( \u0027Set Variables\u0027 ).item.json.fileExtension }}",
+                                                                                                                    "rightValue":  "pdf"
+                                                                                                                }
+                                                                                                            ]
+                                                                                         },
+                                                                          "renameOutput":  true
+                                                                      },
+                                                                      {
+                                                                          "outputKey":  "text",
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "leftValue":  "",
+                                                                                                             "caseSensitive":  false,
+                                                                                                             "typeValidation":  "strict"
+                                                                                                         },
+                                                                                             "combinator":  "and",
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "3b74efbd-10de-4bba-9154-eccaf09e79b0",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals",
+                                                                                                                                     "singleValue":  true
+                                                                                                                                 },
+                                                                                                                    "leftValue":  "={{ $( \u0027Set Variables\u0027 ).item.json.fileExtension }}",
+                                                                                                                    "rightValue":  "txt"
+                                                                                                                }
+                                                                                                            ]
+                                                                                         },
+                                                                          "renameOutput":  true
+                                                                      },
+                                                                      {
+                                                                          "outputKey":  "csv",
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "leftValue":  "",
+                                                                                                             "caseSensitive":  false,
+                                                                                                             "typeValidation":  "strict"
+                                                                                                         },
+                                                                                             "combinator":  "and",
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "faea1ac1-f87a-420e-a4e5-9140f2db8c49",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals",
+                                                                                                                                     "singleValue":  true
+                                                                                                                                 },
+                                                                                                                    "leftValue":  "={{ $( \u0027Set Variables\u0027 ).item.json.fileExtension }}",
+                                                                                                                    "rightValue":  "csv"
+                                                                                                                }
+                                                                                                            ]
+                                                                                         },
+                                                                          "renameOutput":  true
+                                                                      },
+                                                                      {
+                                                                          "outputKey":  "xlsx",
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "leftValue":  "",
+                                                                                                             "caseSensitive":  false,
+                                                                                                             "typeValidation":  "strict"
+                                                                                                         },
+                                                                                             "combinator":  "and",
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "7d48e0d5-c3f0-4eb4-aa7a-4efbf0f50d1a",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals",
+                                                                                                                                     "singleValue":  true
+                                                                                                                                 },
+                                                                                                                    "leftValue":  "={{ $( \u0027Set Variables\u0027 ).item.json.fileExtension }}",
+                                                                                                                    "rightValue":  "xlsx"
+                                                                                                                }
+                                                                                                            ]
+                                                                                         },
+                                                                          "renameOutput":  true
+                                                                      }
+                                                                  ]
+                                                   },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.switch",
+                      "typeVersion":  3,
+                      "position":  [
+                                       420,
+                                       700
+                                   ],
+                      "id":  "cb83bc2a-7a71-4e23-a72f-0c5ca9eebd9d",
+                      "name":  "File Type Router"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "http://pdf-parser:3000/extract",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ $json }}",
+                                         "options":  {
+                                                         "response":  {
+                                                                          "response":  {
+                                                                                           "responseFormat":  "json"
+                                                                                       }
+                                                                      }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       700,
+                                       420
+                                   ],
+                      "id":  "b8ed8d44-e57d-4c3b-829c-8d2e29e1f4d2",
+                      "name":  "Extract from PDF"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "text",
+                                         "binaryPropertyName":  "data",
+                                         "options":  {
+                                                         "encoding":  "utf8",
+                                                         "stripBOM":  true,
+                                                         "keepSource":  "json"
+                                                     },
+                                         "destinationKey":  "data"
+                                     },
+                      "type":  "n8n-nodes-base.extractFromFile",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       700,
+                                       580
+                                   ],
+                      "id":  "d78fcd7e-0d1f-428c-aa47-ef35d5c14f03",
+                      "name":  "Extract from Text"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "csv",
+                                         "binaryPropertyName":  "data",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.extractFromFile",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       700,
+                                       740
+                                   ],
+                      "id":  "d2d93bf5-6d48-4b09-a60c-d0deed7c36f7",
+                      "name":  "Extract from CSV"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "xlsx",
+                                         "binaryPropertyName":  "data",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.extractFromFile",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       700,
+                                       900
+                                   ],
+                      "id":  "f50e4f72-5a96-4e8c-9eaa-54b3a4d7e7fb",
+                      "name":  "Extract from XLSX"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "const items = $input.all();\nconst first = items[0]?.json ?? {};\nlet config = first;\ntry {\n  const setVariables = $(\u0027Set Variables\u0027).first().json;\n  if (setVariables?.file_changed) config = setVariables;\n} catch {}\n\nconst values = items.map((item) =\u003e {\n  const json = item.json ?? {};\n  if (typeof json.data === \u0027string\u0027) return json.data;\n  if (typeof json.text === \u0027string\u0027) return json.text;\n  return Object.entries(json)\n    .map(([key, value]) =\u003e key + \u0027: \u0027 + (typeof value === \u0027object\u0027 ? JSON.stringify(value) : String(value)))\n    .join(\u0027\\t\u0027);\n}).filter((value) =\u003e value.trim().length \u003e 0);\n\nconst extractedText = values.join(\u0027\\n\u0027).trim();\nif (!extractedText) {\n  throw new Error(\u0027No searchable text was extracted. Scanned PDFs and images require OCR.\u0027);\n}\n\nconst fileName = config.fileName || first.fileName || \u0027knowledge-upload\u0027;\nconst fileLocation = config.file_changed || first.file_changed || \u0027/knowledge-files/\u0027 + fileName;\nconst fileExtension = config.fileExtension || fileName.split(\u0027.\u0027).pop().toLowerCase();\nconst data = [\n  \u0027## file location\u0027,\n  fileLocation,\n  \u0027## file created\u0027,\n  new Date().toISOString(),\n  \u0027## file contents\u0027,\n  extractedText,\n].join(\u0027\\n\u0027);\n\nreturn [{\n  json: {\n    directory: config.directory || \u0027/knowledge-files\u0027,\n    fileName,\n    file_changed: fileLocation,\n    file_added: \u0027\u0027,\n    file_location: fileLocation,\n    fileExtension,\n    qdrant_collection: config.qdrant_collection || \u0027hragent_knowledge\u0027,\n    data,\n  },\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       980,
+                                       700
+                                   ],
+                      "id":  "f4a991a5-b1f5-476e-984f-9e0e7f0d8b24",
+                      "name":  "Normalize Extracted Content"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "const encodedPdf = (await this.helpers.getBinaryDataBuffer(0, \u0027data\u0027)).toString(\u0027base64\u0027);\nreturn [{\n  json: {\n    fileName: $(\u0027Set Variables\u0027).first().json.fileName,\n    data: encodedPdf,\n  },\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       560,
+                                       420
+                                   ],
+                      "id":  "9a8b7c6d-5e4f-4321-9abc-def012345678",
+                      "name":  "Prepare PDF Parser Request"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "const meta = $(\u0027Normalize Extracted Content\u0027).first().json;\nreturn [{ json: {\n  success: true,\n  fileName: meta.fileName,\n  collection: meta.qdrant_collection,\n  message: \u0027Knowledge vectors indexed\u0027,\n} }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1940,
+                                       1120
+                                   ],
+                      "id":  "4a5b6c7d-8e9f-4012-abcd-34567890efab",
+                      "name":  "Ingest Result"
+                  }
+              ],
+    "connections":  {
+                        "Handle File Event":  {
+                                                  "main":  [
+                                                               [
+
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "Search For Existing Point1",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "Read File",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Default Data Loader":  {
+                                                    "ai_document":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Qdrant Vector Store",
+                                                                                "type":  "ai_document",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                },
+                        "Delete Existing Point":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Remap for File_Added Flow",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Embeddings Ollama - Ingestion":  {
+                                                              "ai_embedding":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "Qdrant Vector Store",
+                                                                                           "type":  "ai_embedding",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                          },
+                        "Remap for File_Added Flow":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Read File",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Search For Existing Point1":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Has Existing Point?1",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "Recursive Character Text Splitter":  {
+                                                                  "ai_textSplitter":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "Default Data Loader",
+                                                                                                  "type":  "ai_textSplitter",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                              },
+                        "Knowledge Upload Webhook":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Set Variables",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Set Variables":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Write Knowledge File",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Write Knowledge File":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Normalize Upload Metadata",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Normalize Upload Metadata":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Handle File Event",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Read File":  {
+                                          "main":  [
+                                                       [
+                                                           {
+                                                               "node":  "File Type Router",
+                                                               "type":  "main",
+                                                               "index":  0
+                                                           }
+                                                       ]
+                                                   ]
+                                      },
+                        "File Type Router":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Prepare PDF Parser Request",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ],
+                                                              [
+                                                                  {
+                                                                      "node":  "Extract from Text",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ],
+                                                              [
+                                                                  {
+                                                                      "node":  "Extract from CSV",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ],
+                                                              [
+                                                                  {
+                                                                      "node":  "Extract from XLSX",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Extract from PDF":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Normalize Extracted Content",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Extract from Text":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Normalize Extracted Content",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Extract from CSV":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Normalize Extracted Content",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Extract from XLSX":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Normalize Extracted Content",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Normalize Extracted Content":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Qdrant Vector Store",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Has Existing Point?1":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Delete Existing Point",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ],
+                                                                  [
+                                                                      {
+                                                                          "node":  "Read File",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Prepare PDF Parser Request":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Extract from PDF",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "Qdrant Vector Store":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Ingest Result",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "errorWorkflow":  "e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17"
+                 },
+    "staticData":  null,
+    "pinData":  {
+
+                },
+    "tags":  [
+
+             ]
+}

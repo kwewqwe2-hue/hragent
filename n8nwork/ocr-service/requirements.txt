@@ -1,0 +1,5 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+numpy==1.26.4
+pillow==11.0.0
+rapidocr-onnxruntime==1.4.4

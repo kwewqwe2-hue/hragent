@@ -1,0 +1,90 @@
+{
+  "name": "HRAgent-08-Error-Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json ?? {};\nconst workflow = payload.workflow ?? {};\nconst execution = payload.execution ?? {};\nconst node = payload.node ?? {};\nconst error = payload.error ?? {};\nconst message = String(error.message ?? payload.message ?? 'n8n workflow failed')\n  .replace(/[\\r\\n]+/g, ' ')\n  .slice(0, 1000);\nreturn [{\n  json: {\n    workflowName: String(workflow.name ?? 'unknown workflow').slice(0, 160),\n    workflowId: workflow.id ? String(workflow.id).slice(0, 160) : undefined,\n    executionId: execution.id ? String(execution.id).slice(0, 160) : undefined,\n    lastNode: node.name ? String(node.name).slice(0, 160) : undefined,\n    message,\n    occurredAt: new Date().toISOString(),\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "id": "f2a6c9d4-1e83-4b57-8f20-6c3d9a7e5b12",
+      "name": "Normalize Error"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SAAS_BASE_URL + '/internal/agent/v1/errors' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SAAS_AGENT_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [520, 0],
+      "id": "a7d3e1f9-5c28-46b0-8e94-1f6a2c7d9b35",
+      "name": "Report Error to SaaS",
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Error": {
+      "main": [
+        [
+          {
+            "node": "Report Error to SaaS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Shanghai"
+  },
+  "versionId": "7d2a9f41-6c58-4b03-ae17-8f1d5c9b2e64",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "id": "e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17"
+}
