@@ -12,6 +12,7 @@ RUN for attempt in 1 2 3; do \
     done
 
 FROM eclipse-temurin:21-jre
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libreoffice-writer fonts-noto-cjk poppler-utils && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/target/hragentv1-0.0.1-SNAPSHOT.jar app.jar
 EXPOSE 8080

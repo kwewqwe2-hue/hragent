@@ -32,6 +32,10 @@ public class DeepSeekClient {
                 : "mock-deepseek";
     }
 
+    public boolean isConfigured(Long tenantId) {
+        return configurationService.resolve(tenantId).configured();
+    }
+
     public String chat(Long tenantId, String systemPrompt, String userPrompt) throws Exception {
         AiConfigurationService.RuntimeConfig config = configurationService.resolve(tenantId);
         if (!config.configured()) {
@@ -96,10 +100,8 @@ public class DeepSeekClient {
 
     private String mockAnswer(String userPrompt) {
         return """
-                【模拟智能体回复】
-                系统当前没有启用可用的 DeepSeek 配置，因此使用本地模拟回复。
-                建议补充请假类型、开始日期、结束日期、天数和请假原因。最终审批仍以直属主管和 HR 的结果为准。
-                用户问题：%s
+                我已经收到你的问题。当前智能模型暂时不可用，我会优先依据已审核的知识库资料帮你核对。
+                如果你是想办理请假，请告诉我假别、起止日期和原因；我会帮你确认还缺哪些信息。
                 """.formatted(userPrompt);
     }
 

@@ -253,7 +253,7 @@ public class AgentIntegrationService {
                 "POST",
                 "/internal/agent/v1/leave/requests/" + requestId + "/review"
         );
-        LeaveRequest before = leaveRequestRepository.findById(requestId)
+        LeaveRequest before = leaveRequestRepository.lockForReview(requestId, context.key().getTenantId())
                 .filter(request -> request.getTenantId().equals(context.key().getTenantId()))
                 .orElseThrow(() -> AppException.notFound("Leave request not found"));
         boolean alreadyProcessed = before.getStatus() != RequestStatus.PENDING_MANAGER;
@@ -298,7 +298,7 @@ public class AgentIntegrationService {
                 && actor.getRole() != com.hragent.hragentv1.domain.Role.HR) {
             throw AppException.forbidden("只有主管或 HR 可以处理审批卡片");
         }
-        LeaveRequest before = leaveRequestRepository.findById(action.requestId())
+        LeaveRequest before = leaveRequestRepository.lockForReview(action.requestId(), key.getTenantId())
                 .filter(request -> request.getTenantId().equals(key.getTenantId()))
                 .orElseThrow(() -> AppException.notFound("Leave request not found"));
         boolean alreadyProcessed = before.getStatus() != RequestStatus.PENDING_MANAGER;
@@ -432,6 +432,10 @@ public class AgentIntegrationService {
                 + ", node=" + safe(report.lastNode())
                 + ", message=" + report.message();
         log(key, "POST", "/internal/agent/v1/errors", 500, message);
+    }
+
+    public UserAccount serviceEmployee(String rawApiKey, String dingtalkUserId) {
+        return resolve(rawApiKey, dingtalkUserId, "POST", "/internal/agent/v1/service-reply").user();
     }
 
     private IntegrationKeyAndUser resolve(String rawApiKey, String dingtalkUserId, String method, String path) {

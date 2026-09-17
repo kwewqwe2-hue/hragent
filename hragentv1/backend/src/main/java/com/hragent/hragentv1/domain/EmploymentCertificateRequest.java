@@ -16,6 +16,11 @@ public class EmploymentCertificateRequest {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String encryptedTemplateValues;
+    public String getEncryptedTemplateValues() { return encryptedTemplateValues; }
+    public void setEncryptedTemplateValues(String value) { encryptedTemplateValues=value; }
 
     @Column(nullable = false)
     private Long tenantId;

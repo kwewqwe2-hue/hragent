@@ -18,4 +18,7 @@ public interface EmploymentCertificateRequestRepository extends JpaRepository<Em
     );
 
     Optional<EmploymentCertificateRequest> findByIdAndTenantId(Long id, Long tenantId);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select r from EmploymentCertificateRequest r where r.id=:id and r.tenantId=:tenantId")
+    Optional<EmploymentCertificateRequest> lockForUpdate(@org.springframework.data.repository.query.Param("id") Long id,@org.springframework.data.repository.query.Param("tenantId") Long tenantId);
 }

@@ -16,6 +16,10 @@ public class EmploymentCertificateTemplate {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column(length = 20)
+    private String templateSource;
+    public String getTemplateSource() { return templateSource == null ? (reviewStatus == null || java.util.Objects.equals(uploadedByEmployeeId, reviewedByEmployeeId) ? "COMPANY" : "PERSONAL") : templateSource; }
+    public void setTemplateSource(String value) { templateSource=value; }
 
     @Column(nullable = false)
     private Long tenantId;

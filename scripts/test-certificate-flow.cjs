@@ -1,0 +1,42 @@
+// Built UI contract checks. All API requests use synthetic fixtures; no live business writes.
+const fs=require('node:fs/promises'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
+const {chromium}=require(path.join(process.env.USERPROFILE,'.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'));
+(async()=>{
+ const artifact=path.resolve('.artifacts/certificate-upgrade');await fs.mkdir(artifact,{recursive:true});
+ const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://local');const chat=url.pathname.startsWith('/agent');const root=path.resolve(chat?'hragent-chat/dist':'hragentv1/frontend/dist');let part=decodeURIComponent(url.pathname).replace(chat?/^\/agent\/?/:/^\//,'');if(!path.extname(part))part='index.html';let file=path.resolve(root,part);if(!file.startsWith(root+path.sep))return res.writeHead(403).end();res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'})[path.extname(file)]||'application/octet-stream');res.end(await fs.readFile(file))}catch{res.writeHead(404).end()}});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
+ const browser=await chromium.launch({channel:'msedge',headless:true});const errors=[],writes=[];
+ const preview={fileName:'自备模板.docx',fileSize:100,readable:true,hasPlaceholders:true,canUpload:true,placeholders:['{{legalName}}','{{department}}','{{接收单位}}'],unsupportedPlaceholders:['{{接收单位}}'],warnings:[]};
+ const fixture={name:'自备模板.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from('synthetic UI fixture')};
+ const action={label:'上传模板并核对字段',type:'certificate-template',value:'201'};
+ const row={id:101,employeeNo:'T1',employeeName:'测试员工',certificateType:'STANDARD',certificateTypeLabel:'在职证明',purpose:'资格审核',language:'CHINESE',languageLabel:'中文',status:'GENERATED',statusLabel:'证明已生成',documentReady:true,generatedFileName:'证明.docx',profileReady:true,missingProfileFields:[],submittedAt:'2026-09-11T10:00:00',templateValues:{接收单位:'资格审核中心'}};
+ async function context(role='EMPLOYEE',width=1280){const c=await browser.newContext({viewport:{width,height:900}});const user={id:role==='HR'?2:1,tenantId:1,employeeProfileId:1,membershipStatus:'ACTIVE',role,employeeStatus:'ACTIVE',name:'测试员工',username:'fixture',publicId:'T1',workspaceName:'测试企业',platformAdmin:false};
+  await c.addInitScript(u=>{localStorage.setItem('hragent_token','test');localStorage.setItem('hragent_user',JSON.stringify(u));localStorage.setItem('hragent_workspace_id','1')},user);
+  let uploaded=false;
+  await c.route('**/api/**',async route=>{const req=route.request(),p=new URL(req.url()).pathname,m=req.method();const reply=data=>route.fulfill({json:{success:true,data}});
+   if(p.endsWith('/auth/me'))return reply(user);
+   if(p.endsWith('/web-chat/messages')){const text=req.postDataJSON().message;writes.push({p,text});if(text==='自行上传')return reply({answer:'请核对这份在职证明。请上传你的模板。',actions:[action]});if(text==='确认提交')return reply({answer:'已提交，等待 HR 审核。',actions:[]});return reply({answer:'是否需要使用你自己提供的模板？',actions:[{label:'公司模板',type:'message',value:'公司模板'},{label:'自行上传',type:'message',value:'自行上传'}]})}
+   if(p.endsWith('/web-chat/attachments')||(p.endsWith('/lifecycle/201/certificate-template')&&m==='POST')){uploaded=true;writes.push({p,m});return reply({answer:'已收到模板并提取字段，请核对。',actions:[action]})}
+   if(p.endsWith('/lifecycle/201/certificate-template')){if(m==='PUT'){writes.push({p,m,body:req.postDataJSON()});return reply({answer:'请核对这份在职证明，模板字段已经填写。',actions:[{label:'确认提交申请',type:'message',value:'确认提交'}]})}return reply({uploaded,fileName:'自备模板.docx',fields:preview.placeholders,customFields:preview.unsupportedPlaceholders,values:{},confirmed:false})}
+   if(p.endsWith('/employment-certificates/options'))return reply({certificateTypes:[{value:'STANDARD',label:'在职证明'},{value:'VISA',label:'签证证明'}],languages:[{value:'CHINESE',label:'中文'}]});
+   if(p.endsWith('/employment-certificate-templates/preview'))return reply(preview);
+   if(p.endsWith('/employment-certificate-templates'))return reply([]);
+   if(p.endsWith('/employment-certificates/with-template')){writes.push({p,m,body:req.postData()});return reply({id:102})}
+   if(p.endsWith('/employment-certificates/my')||p.endsWith('/employment-certificates/hr/all'))return reply([row]);
+   if(p.endsWith('/esign/config')){if(m==='PUT')writes.push({p,m,body:req.postDataJSON()});return reply({enabled:false,hasCredentials:false,operatorId:'',organizationName:'',sealId:'',sealKeyword:'公司盖章处'})}
+   if(p.endsWith('/101/esign'))return reply({status:'SIGNED',label:'电子签章已完成',signed:true,error:'',flowId:'flow-1'});
+   if(p.endsWith('/signed-document'))return route.fulfill({contentType:'application/pdf',body:'%PDF-1.4 UI fixture',headers:{'content-disposition':'attachment; filename=signed.pdf'}});
+   return reply([]);
+  });const page=await c.newPage();page.setDefaultTimeout(18000);page.on('pageerror',e=>errors.push(e.message));return{c,page};
+ }
+ try{
+  const {page}=await context('EMPLOYEE',390);await page.goto(base+'/agent/');await page.getByPlaceholder('给 HRAgent 发送消息').fill('我要开在职证明');await page.getByRole('button',{name:'发送',exact:true}).click();await page.getByRole('button',{name:'自行上传',exact:true}).click();
+  await page.getByLabel('上传在职证明模板').last().setInputFiles(fixture);await page.getByLabel('接收单位',{exact:true}).last().waitFor();await page.getByRole('button',{name:'确认模板字段'}).last().click();await page.getByText('请补齐模板字段',{exact:true}).waitFor();assert.equal(writes.filter(w=>w.m==='PUT').length,0);
+  await page.getByLabel('接收单位',{exact:true}).last().fill('资格审核中心');await page.screenshot({path:path.join(artifact,'chat-template-mobile.png'),fullPage:true});await page.getByRole('button',{name:'确认模板字段'}).last().click();await page.getByRole('button',{name:'确认提交申请'}).click();await page.getByText('已提交，等待 HR 审核。',{exact:true}).waitFor();assert.equal(writes.find(w=>w.m==='PUT').body['接收单位'],'资格审核中心');
+  const second=await context();await second.page.goto(base+'/agent/');await second.page.getByPlaceholder('给 HRAgent 发送消息').fill('我要开在职证明');await second.page.getByRole('button',{name:'发送',exact:true}).click();await second.page.getByRole('button',{name:'自行上传',exact:true}).click();await second.page.locator('input.file-input').setInputFiles(fixture);await second.page.getByRole('button',{name:'发送',exact:true}).click();await second.page.getByLabel('接收单位',{exact:true}).last().waitFor();assert(writes.some(w=>w.p.endsWith('/web-chat/attachments')));
+  const employee=await context();await employee.page.goto(base+'/certificates');await employee.page.locator('.el-radio').filter({hasText:'自行上传'}).click();await employee.page.locator('input[type=file]').first().setInputFiles(fixture);await employee.page.getByText('模板检查通过',{exact:true}).waitFor();const receive=employee.page.locator('.el-form-item').filter({hasText:'接收单位'}).last();await receive.locator('input').fill('资格审核中心');await employee.page.getByPlaceholder('例如：办理银行业务').fill('资格审核');await employee.page.screenshot({path:path.join(artifact,'certificate-personal-template.png'),fullPage:true});await employee.page.getByRole('button',{name:'提交申请',exact:true}).click();await employee.page.getByText('申请和模板已提交，等待 HR 一次审核',{exact:true}).waitFor();assert(writes.some(w=>w.p.endsWith('/with-template')&&w.body.includes('STANDARD')&&w.body.includes('资格审核中心')));
+  const admin=await context('HR');await admin.page.goto(base+'/certificates');await admin.page.locator('.el-table__expand-icon').first().click();await admin.page.getByText('电子签章已完成',{exact:true}).waitFor();const download=admin.page.waitForEvent('download');await admin.page.getByRole('button',{name:'下载已盖章 PDF'}).click();assert((await download).suggestedFilename().endsWith('.pdf'));
+  await admin.page.getByRole('tab',{name:'腾讯电子签',exact:true}).click();await admin.page.getByRole('heading',{name:'腾讯电子签',exact:true}).waitFor();assert.equal(await admin.page.getByText('证明模板管理',{exact:true}).count(),0);await admin.page.screenshot({path:path.join(artifact,'esign-settings.png'),fullPage:true});
+  assert.deepEqual(errors,[]);console.log('PASS: both chat upload entries, required custom fields, submission, general certificate template upload, HR signed PDF, signing settings, mobile rendering; no live API writes.');
+ }finally{await browser.close();server.close()}
+})().catch(e=>{console.error(e);process.exitCode=1});

@@ -9,10 +9,17 @@
     </div>
 
     <div class="stat-grid">
-      <div class="stat-card"><div class="label">待主管审批</div><div class="value">{{ stats.pendingManager || 0 }}</div></div>
-      <div class="stat-card"><div class="label">待管理员备案</div><div class="value">{{ stats.pendingHr || 0 }}</div></div>
-      <div class="stat-card"><div class="label">已通过</div><div class="value">{{ stats.approved || 0 }}</div></div>
-      <div class="stat-card"><div class="label">已驳回</div><div class="value">{{ stats.rejected || 0 }}</div></div>
+      <button
+        v-for="item in statItems"
+        :key="item.key"
+        class="stat-card"
+        type="button"
+        :aria-label="`查看${item.label}`"
+        @click="router.push(item.path)"
+      >
+        <span class="label">{{ item.label }}</span>
+        <span class="stat-value-row"><strong class="value">{{ item.value }}</strong><el-icon><ArrowRight /></el-icon></span>
+      </button>
     </div>
 
     <section class="content-panel heatmap-panel">
@@ -100,12 +107,14 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { ArrowRight, Refresh } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import { getData } from '../api/http'
 import type { LeaveBalance, LeaveCalendar, LeaveCalendarDay, LeaveRequest } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
+const router = useRouter()
 const currentYear = new Date().getFullYear()
 const stats = ref<Record<string, number>>({})
 const balances = ref<LeaveBalance[]>([])
@@ -121,6 +130,27 @@ const listTitle = computed(() => {
   if (auth.user?.role === 'MANAGER') return '我的审批待办'
   if (auth.user?.role === 'HR') return '管理员备案待办'
   return '我的申请记录'
+})
+
+const statItems = computed(() => {
+  const role = auth.user?.role
+  const recordPath = role === 'EMPLOYEE' ? '/my-leave' : '/all-records'
+  return [
+    {
+      key: 'pendingManager',
+      label: '待主管审批',
+      value: stats.value.pendingManager || 0,
+      path: role === 'MANAGER' ? '/manager-approval' : recordPath
+    },
+    {
+      key: 'pendingHr',
+      label: '待管理员备案',
+      value: stats.value.pendingHr || 0,
+      path: role === 'HR' ? '/hr-record' : recordPath
+    },
+    { key: 'approved', label: '已通过', value: stats.value.approved || 0, path: recordPath },
+    { key: 'rejected', label: '已驳回', value: stats.value.rejected || 0, path: recordPath }
+  ]
 })
 
 interface HeatmapCell {
@@ -273,6 +303,49 @@ onBeforeUnmount(() => {
 <style scoped>
 .heatmap-panel {
   margin-bottom: 16px;
+}
+
+.stat-card {
+  width: 100%;
+  min-height: 104px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+  color: inherit;
+  background: #fff;
+  border: 1px solid #d9e0ea;
+  border-radius: 6px;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.stat-card:hover {
+  border-color: #8db8ee;
+  box-shadow: 0 5px 14px rgba(47, 128, 237, 0.12);
+  transform: translateY(-1px);
+}
+
+.stat-card:focus-visible {
+  outline: 3px solid rgba(47, 128, 237, 0.28);
+  outline-offset: 2px;
+}
+
+.stat-value-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stat-value-row .value {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.stat-value-row .el-icon {
+  color: #2f80ed;
+  font-size: 18px;
 }
 
 .heatmap-caption {

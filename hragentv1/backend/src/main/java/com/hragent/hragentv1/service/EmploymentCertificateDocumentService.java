@@ -57,7 +57,7 @@ public class EmploymentCertificateDocumentService {
         Tenant tenant = tenantRepository.findById(request.getTenantId())
                 .orElseThrow(() -> AppException.notFound("企业空间不存在"));
         String safeEmployeeNo = sanitizeFilePart(employee.getEmployeeNo());
-        String fileName = "在职证明-" + safeEmployeeNo + "-" + request.getId() + ".docx";
+        String fileName = (request.getCertificateType() == com.hragent.hragentv1.domain.EmploymentCertificateType.INCOME ? "收入证明-" : "在职证明-") + safeEmployeeNo + "-" + request.getId() + ".docx";
         String storageKey = "tenant-" + request.getTenantId()
                 + "/request-" + request.getId()
                 + "/employment-certificate-" + safeEmployeeNo + "-" + request.getId() + ".docx";
@@ -99,7 +99,8 @@ public class EmploymentCertificateDocumentService {
     ) throws IOException {
         try (XWPFDocument document = new XWPFDocument(); OutputStream output = Files.newOutputStream(path)) {
             configurePage(document);
-            document.getProperties().getCoreProperties().setTitle("在职证明 - " + employee.getEmployeeNo());
+            String documentTitle = request.getCertificateType() == com.hragent.hragentv1.domain.EmploymentCertificateType.INCOME ? "收入证明" : "在职证明";
+            document.getProperties().getCoreProperties().setTitle(documentTitle + " - " + employee.getEmployeeNo());
             document.getProperties().getCoreProperties().setCreator(tenant.getName() + " 人力资源部");
 
             XWPFParagraph reference = document.createParagraph();
@@ -111,7 +112,7 @@ public class EmploymentCertificateDocumentService {
             title.setAlignment(ParagraphAlignment.CENTER);
             title.setSpacingBefore(320);
             title.setSpacingAfter(520);
-            addRun(title, "在 职 证 明", 20, true);
+            addRun(title, documentTitle.equals("收入证明") ? "收 入 证 明" : "在 职 证 明", 20, true);
 
             LocalDate employmentStart = employee.getEntryDate() != null
                     ? employee.getEntryDate()
@@ -129,7 +130,7 @@ public class EmploymentCertificateDocumentService {
             }
 
             addBodyParagraph(document, "本证明仅用于“" + request.getPurpose()
-                    + "”，不作为本公司对该员工任何经济责任或其他事项的担保。");
+                    + "”。");
             addBodyParagraph(document, "特此证明。");
 
             XWPFParagraph company = document.createParagraph();
@@ -139,7 +140,7 @@ public class EmploymentCertificateDocumentService {
 
             XWPFParagraph department = document.createParagraph();
             department.setAlignment(ParagraphAlignment.RIGHT);
-            addRun(department, "人力资源部（盖章）", 12, false);
+            addRun(department, "公司盖章处", 12, false);
 
             XWPFParagraph issuedAt = document.createParagraph();
             issuedAt.setAlignment(ParagraphAlignment.RIGHT);

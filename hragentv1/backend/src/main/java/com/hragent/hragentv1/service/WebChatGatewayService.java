@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,10 +40,18 @@ import java.util.concurrent.TimeoutException;
 public class WebChatGatewayService {
     private static final Logger log = LoggerFactory.getLogger(WebChatGatewayService.class);
     private static final long MAX_ATTACHMENT_BYTES = 10L * 1024 * 1024;
+    private static final String AGENT_UNAVAILABLE_REPLY = "本次处理没有得到有效结果";
     private static final List<String> ALLOWED_ATTACHMENT_EXTENSIONS =
             List.of("jpg", "jpeg", "png", "pdf", "docx", "txt");
 
     private final WebChatIdentityService identityService;
+    private final AssistantService assistantService;
+    private final EmployeeSelfServiceAssistant selfService;
+    private final EmployeeRelationsService relations;
+    private final EmployeeAgentRouter employeeRouter;
+    private final HandbookKnowledgeService handbook;
+    private final DeepSeekClient directModel;
+    private final boolean workflowEnabled;
     private final EmploymentCertificateTemplateService templateService;
     private final URI n8nWebhookUri;
     private final URI n8nAttachmentParseUri;
@@ -52,9 +61,19 @@ public class WebChatGatewayService {
     private final RestClient restClient;
     private final SecureRandom secureRandom = new SecureRandom();
     private final Map<String, PendingReply> pendingReplies = new ConcurrentHashMap<>();
+    private final PolicyConversationGuide conversationGuide = new PolicyConversationGuide();
+    @org.springframework.beans.factory.annotation.Autowired
+    private PolicyCopilotService policyCopilot;
 
     public WebChatGatewayService(
             WebChatIdentityService identityService,
+            AssistantService assistantService,
+            EmployeeSelfServiceAssistant selfService,
+            EmployeeRelationsService relations,
+            EmployeeAgentRouter employeeRouter,
+            HandbookKnowledgeService handbook,
+            DeepSeekClient directModel,
+            @Value("${app.web-chat.workflow-enabled:true}") boolean workflowEnabled,
             EmploymentCertificateTemplateService templateService,
             @Value("${app.web-chat.n8n-webhook-url}") String n8nWebhookUrl,
             @Value("${app.web-chat.n8n-attachment-parse-url}") String n8nAttachmentParseUrl,
@@ -63,6 +82,13 @@ public class WebChatGatewayService {
             @Value("${app.web-chat.timeout-seconds:120}") int timeoutSeconds
     ) {
         this.identityService = identityService;
+        this.assistantService = assistantService;
+        this.selfService = selfService;
+        this.relations = relations;
+        this.employeeRouter = employeeRouter;
+        this.handbook = handbook;
+        this.directModel = directModel;
+        this.workflowEnabled = workflowEnabled;
         this.templateService = templateService;
         this.n8nWebhookUri = URI.create(n8nWebhookUrl);
         this.n8nAttachmentParseUri = URI.create(n8nAttachmentParseUrl);
@@ -76,8 +102,47 @@ public class WebChatGatewayService {
     }
 
     public WebChatDtos.MessageResponse chat(UserAccount user, String rawMessage) {
+        return chat(user, rawMessage, null);
+    }
+    private final ServiceConversationGuide serviceConversations = new ServiceConversationGuide();
+    public void clearPolicyConversation(UserAccount user,String cid){conversationGuide.clear(user,cid);}
+    public void clearServiceConversation(UserAccount user,String cid){serviceConversations.clear(user,cid);}
+    public String resolveServiceFollowup(UserAccount user,String message,String cid){return serviceConversations.command(user,message,cid).orElse(message);}
+    public Optional<WebChatDtos.MessageResponse> serviceGuidance(UserAccount user,String message,String cid){return serviceConversations.guidance(user,message,cid);}
+    public void rememberService(UserAccount user,String message,String cid,WebChatDtos.MessageResponse response){serviceConversations.observe(user,message,cid,response);}
+    public Optional<WebChatDtos.MessageResponse> policyConversation(UserAccount user,String message,String cid){
+        if(policyCopilot!=null && message!=null && message.contains("年金")) {
+            var benefit=policyCopilot.benefitAnswer(user,message);
+            if(benefit.isPresent()) {
+                var safety=relations.triage(user,message);
+                if(safety.isPresent())return Optional.of(new WebChatDtos.MessageResponse(safety.get(),"er-human-support",UUID.randomUUID().toString()));
+                conversationGuide.clear(user,cid);
+                return Optional.of(new WebChatDtos.MessageResponse(benefit.get().answer(),"company-benefit-guidance",UUID.randomUUID().toString()));
+            }
+        }
+        if(!conversationGuide.interviewRelevant(user,message,cid))return Optional.empty();
+        var safety=relations.triage(user,message);
+        if(safety.isPresent())return Optional.of(new WebChatDtos.MessageResponse(safety.get(),"er-human-support",UUID.randomUUID().toString()));
+        return conversationGuide.opening(user,message,cid);
+    }
+
+    public Map<String, Object> status(UserAccount user) {
+        return Map.of("businessServicesAvailable", true, "directModelConfigured", directModel.isConfigured(user.getTenantId()),
+                "workflowEnabled", workflowEnabled);
+    }
+
+    public WebChatDtos.MessageResponse chat(UserAccount user, String rawMessage, String conversationId) {
         String message = rawMessage == null ? "" : rawMessage.trim();
         String requestId = UUID.randomUUID().toString();
+        var opening = conversationGuide.opening(user, message, conversationId);
+        if(opening.isPresent())return opening.get();
+        message = conversationGuide.resolve(user, message, conversationId);
+        var routed = employeeRouter.reply(user, message, conversationId);
+        if (routed.handled()) return conversationGuide.present(user, message, conversationId, routed, requestId);
+        if (!workflowEnabled) {
+            if (directModel.isConfigured(user.getTenantId())) return fallbackReply(user, message, requestId, "direct model mode");
+            return EmployeeIntentUnderstanding.nextStep(message);
+        }
         String callbackToken = randomToken();
         CompletableFuture<String> future = new CompletableFuture<>();
         pendingReplies.put(requestId, new PendingReply(callbackToken, future));
@@ -91,7 +156,8 @@ public class WebChatGatewayService {
             payload.put("senderId", identityService.issue(user));
             payload.put("senderStaffId", "web-" + user.getEmployeeNo());
             payload.put("conversationType", "1");
-            payload.put("conversationId", "web-" + user.getTenantId() + "-" + user.getId());
+            payload.put("conversationId", "web-" + user.getTenantId() + "-" + user.getId()
+                    + (conversationId == null || !conversationId.matches("[A-Za-z0-9_-]{1,80}") ? "" : "-" + conversationId));
             payload.put("sessionWebhook", callbackUrl);
             payload.put("channel", "web");
 
@@ -103,20 +169,43 @@ public class WebChatGatewayService {
                     .toBodilessEntity();
 
             String answer = future.get(timeoutSeconds, TimeUnit.SECONDS);
+            if (isAgentUnavailableReply(answer)) {
+                return fallbackReply(user, message, requestId, "n8n returned no usable result");
+            }
             return new WebChatDtos.MessageResponse(answer, "n8n / DeepSeek", requestId);
         } catch (TimeoutException exception) {
-            throw new AppException(HttpStatus.GATEWAY_TIMEOUT, "智能体响应超时，请稍后重试。");
+            return fallbackReply(user, message, requestId, "n8n response timed out");
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new AppException(HttpStatus.SERVICE_UNAVAILABLE, "智能体请求已中断，请重新发送。");
+            return fallbackReply(user, message, requestId, "n8n request interrupted");
         } catch (AppException exception) {
             throw exception;
         } catch (Exception exception) {
             log.error("Web chat gateway failed requestId={}", requestId, exception);
-            throw new AppException(HttpStatus.BAD_GATEWAY, "无法连接本地 n8n，请检查 n8n 和 Docker 是否正在运行。");
+            return fallbackReply(user, message, requestId, "n8n gateway request failed");
         } finally {
             pendingReplies.remove(requestId);
         }
+    }
+
+    private WebChatDtos.MessageResponse fallbackReply(
+            UserAccount user,
+            String message,
+            String requestId,
+            String reason
+    ) {
+        log.warn("Web chat is using the local fallback requestId={} reason={}", requestId, reason);
+        try {
+            var fallback = assistantService.chat(user, message);
+            return new WebChatDtos.MessageResponse(fallback.answer(), fallback.provider(), requestId);
+        } catch (Exception exception) {
+            log.error("Web chat fallback failed requestId={}", requestId, exception);
+            throw new AppException(HttpStatus.SERVICE_UNAVAILABLE, "智能体服务暂时不可用，请稍后重试。");
+        }
+    }
+
+    private boolean isAgentUnavailableReply(String answer) {
+        return answer != null && answer.contains(AGENT_UNAVAILABLE_REPLY);
     }
 
     public WebChatDtos.MessageResponse chatWithAttachment(
@@ -124,6 +213,8 @@ public class WebChatGatewayService {
             MultipartFile file,
             String rawInstruction
     ) {
+        var safety = relations.triage(user, rawInstruction == null ? "附件咨询" : rawInstruction);
+        if (safety.isPresent()) return new WebChatDtos.MessageResponse(safety.get() + "\n本次附件尚未解析；请通过工单说明必要的证据线索。", "er-human-support", UUID.randomUUID().toString());
         ValidatedAttachment attachment = validateAttachment(file);
         Map<String, Object> parsed = parseAttachment(file, attachment);
         String extractedText = stringValue(parsed.get("extractedText"));

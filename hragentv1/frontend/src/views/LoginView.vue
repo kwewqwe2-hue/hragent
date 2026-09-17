@@ -59,6 +59,9 @@ async function submit() {
   try {
     await auth.login(form.username, form.password)
     ElMessage.success('登录成功')
+    if (auth.hasActiveWorkspace && !auth.user?.platformAdmin && auth.user?.role !== 'HR') {
+      window.location.assign('/agent/'); return
+    }
     router.push(auth.user?.platformAdmin
       ? '/platform-admin'
       : auth.user?.role === 'NEW_HIRE'

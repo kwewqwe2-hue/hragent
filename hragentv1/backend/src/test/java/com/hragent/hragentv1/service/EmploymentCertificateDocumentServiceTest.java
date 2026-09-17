@@ -21,8 +21,9 @@ class EmploymentCertificateDocumentServiceTest {
     @TempDir
     Path tempDir;
 
-    @Test
-    void generatesReadableStandardChineseDocx() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = EmploymentCertificateType.class, names = {"STANDARD", "INCOME"})
+    void generatesReadableStandardChineseDocx(EmploymentCertificateType certificateType) throws Exception {
         TenantRepository tenantRepository = mock(TenantRepository.class);
         Tenant tenant = new Tenant();
         tenant.setId(1L);
@@ -56,7 +57,7 @@ class EmploymentCertificateDocumentServiceTest {
         request.setId(45L);
         request.setTenantId(1L);
         request.setEmployeeId(3L);
-        request.setCertificateType(EmploymentCertificateType.STANDARD);
+        request.setCertificateType(certificateType);
         request.setLanguage(CertificateLanguage.CHINESE);
         request.setPurpose("办理银行业务");
         request.setIncludeSalary(true);
@@ -65,7 +66,7 @@ class EmploymentCertificateDocumentServiceTest {
                 service.generateStandardChinese(request, employee, profile);
         byte[] content = service.read(generated.storageKey());
 
-        assertThat(generated.fileName()).isEqualTo("在职证明-E001-45.docx");
+        assertThat(generated.fileName()).isEqualTo((certificateType == EmploymentCertificateType.INCOME ? "收入证明" : "在职证明") + "-E001-45.docx");
         assertThat(content.length).isGreaterThan(2_000);
         assertThat(Files.isRegularFile(tempDir.resolve(generated.storageKey()))).isTrue();
         try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(content))) {
@@ -76,7 +77,8 @@ class EmploymentCertificateDocumentServiceTest {
                     .flatMap(footer -> footer.getParagraphs().stream())
                     .map(paragraph -> paragraph.getText())
                     .reduce("", (left, right) -> left + "\n" + right);
-            assertThat(text).contains("在 职 证 明");
+            assertThat(text).contains(certificateType == EmploymentCertificateType.INCOME ? "收 入 证 明" : "在 职 证 明");
+            assertThat(text).contains("公司盖章处");
             assertThat(text).contains("张三");
             assertThat(text).contains("研发中心Java 工程师");
             assertThat(text).contains("CNY 15,000.00");

@@ -1,5 +1,5 @@
 <template>
-  <el-container class="shell">
+  <el-container class="shell" :class="{ 'assistant-embedded': route.query.embed === 'agent' }">
     <el-aside width="232px" class="sidebar">
       <div class="brand">
         <div class="brand-mark">HR</div>
@@ -159,6 +159,7 @@ const menuItems = computed<MenuItem[]>(() => {
   if (auth.user?.role === 'NEW_HIRE') {
     return [
       { path: '/onboarding', label: '入职办理', icon: Postcard },
+      { path: '/employee-services', label: '员工服务与关怀', icon: Grid },
       common[1],
       { path: '/workspace', label: '企业空间', icon: OfficeBuilding }
     ]
@@ -166,6 +167,7 @@ const menuItems = computed<MenuItem[]>(() => {
   if (auth.user?.role === 'EMPLOYEE') {
     return [
       common[0],
+      { path: '/employee-services', label: '员工服务中心', icon: Grid },
       { path: '/personal-info', label: '个人信息', icon: Postcard },
       { path: '/certificates', label: '在职证明', icon: Document },
       { path: '/my-leave', label: '我的请假', icon: Document },
@@ -179,6 +181,7 @@ const menuItems = computed<MenuItem[]>(() => {
   if (auth.user?.role === 'MANAGER') {
     return [
       common[0],
+      { path: '/employee-services', label: '员工服务中心', icon: Grid },
       { path: '/personal-info', label: '个人信息', icon: Postcard },
       { path: '/certificates', label: '在职证明', icon: Document },
       { path: '/my-leave', label: '我的请假', icon: Document },
@@ -192,7 +195,9 @@ const menuItems = computed<MenuItem[]>(() => {
   }
   return [
     common[0],
+    { path: '/employee-services', label: '员工服务与组织运营', icon: Grid },
     { path: '/onboarding', label: '入职管理', icon: Postcard },
+    { path: '/hrssc', label: 'HRSSC 服务办理', icon: List },
     { path: '/my-leave', label: '我的请假', icon: Document },
     { path: '/certificates', label: '证明管理', icon: Document },
     common[1],
@@ -292,7 +297,7 @@ async function handleAccountCommand(command: string) {
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background: #2f80ed;
+  background: #237c61;
   font-weight: 800;
 }
 
@@ -333,7 +338,7 @@ async function handleAccountCommand(command: string) {
 
 .menu :deep(.el-menu-item.is-active) {
   color: #fff !important;
-  background: #2f80ed !important;
+  background: #237c61 !important;
 }
 
 .topbar {
@@ -406,4 +411,7 @@ async function handleAccountCommand(command: string) {
     width: min(220px, 54vw);
   }
 }
+</style>
+<style>
+.assistant-embedded > .sidebar,.assistant-embedded .topbar{display:none!important}.assistant-embedded .main{padding:16px!important}.assistant-embedded .employee-services{padding:0!important}.assistant-embedded .es-hero,.assistant-embedded .es-profile,.assistant-embedded .es-tabs{display:none!important}
 </style>

@@ -20,6 +20,12 @@ import java.util.stream.Collectors;
 
 @Service
 public class EmploymentCertificateService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private SecretCryptoService templateCrypto;
+    @org.springframework.beans.factory.annotation.Autowired
+    private CertificateTemplatePreparationService templatePreparation;
+    @org.springframework.beans.factory.annotation.Autowired
+    private CertificateSigningService signing;
     private final EmploymentCertificateRequestRepository requestRepository;
     private final EmployeePersonalProfileRepository profileRepository;
     private final UserAccountRepository userAccountRepository;
@@ -83,9 +89,6 @@ public class EmploymentCertificateService {
     ) {
         validateCreate(input);
         requireActiveEmployee(actor);
-        if (input.certificateType() != EmploymentCertificateType.VISA) {
-            throw AppException.badRequest("员工上传的专用模板只用于出境或签证在职证明");
-        }
 
         EmploymentCertificateRequest request = requestRepository.save(buildRequest(actor, input));
         EmploymentCertificateTemplate template = templateService.uploadProposal(
@@ -161,6 +164,7 @@ public class EmploymentCertificateService {
     ) {
         requireHr(actor);
         EmploymentCertificateRequest request = requireRequest(actor.getTenantId(), requestId);
+        if (request.getEmployeeId().equals(actor.getId())) throw AppException.forbidden("不能审核本人证明申请，请由其他 HR 处理");
         if (request.getStatus() != CertificateRequestStatus.PENDING_HR) {
             throw AppException.badRequest("该申请已经处理，请刷新列表");
         }
@@ -193,11 +197,11 @@ public class EmploymentCertificateService {
         if (input.approved()) {
             EmployeePersonalProfile profile = profileRepository
                     .findByTenantIdAndEmployeeId(actor.getTenantId(), employee.getId())
-                    .orElseThrow(() -> AppException.badRequest("员工个人档案未维护"));
-            if (request.getCertificateType() == EmploymentCertificateType.STANDARD
+                    .orElseGet(() -> { if(request.getRequestedTemplateId()!=null)return new EmployeePersonalProfile();throw AppException.badRequest("员工个人档案未维护"); });
+            if (request.getRequestedTemplateId() == null && request.getCertificateType() != EmploymentCertificateType.VISA
                     && request.getLanguage() == CertificateLanguage.CHINESE) {
                 generateStandard(request, employee, profile);
-            } else if (request.getCertificateType() == EmploymentCertificateType.VISA) {
+            } else {
                 generateVisa(request, employee, profile, requestedTemplate);
             }
         }
@@ -216,9 +220,6 @@ public class EmploymentCertificateService {
     public EmploymentCertificateDtos.RequestView retryGeneration(UserAccount actor, Long requestId) {
         requireHr(actor);
         EmploymentCertificateRequest request = requireRequest(actor.getTenantId(), requestId);
-        if (request.getCertificateType() != EmploymentCertificateType.VISA) {
-            throw AppException.badRequest("当前只支持重新生成签证/领事馆证明");
-        }
         if (request.getStatus() != CertificateRequestStatus.APPROVED
                 && request.getStatus() != CertificateRequestStatus.GENERATION_FAILED) {
             throw AppException.badRequest("只有审核通过待生成或生成失败的申请可以重新生成");
@@ -231,7 +232,7 @@ public class EmploymentCertificateService {
         }
         EmployeePersonalProfile profile = profileRepository
                 .findByTenantIdAndEmployeeId(actor.getTenantId(), employee.getId())
-                .orElseThrow(() -> AppException.badRequest("员工个人档案未维护"));
+                .orElseGet(() -> { if(request.getRequestedTemplateId()!=null)return new EmployeePersonalProfile();throw AppException.badRequest("员工个人档案未维护"); });
 
         request.setStatus(CertificateRequestStatus.APPROVED);
         request.setSourceTemplateFileName(null);
@@ -240,7 +241,8 @@ public class EmploymentCertificateService {
         request.setGeneratedFileStorageKey(null);
         request.setGeneratedAt(null);
         request.setGenerationError(null);
-        generateVisa(request, employee, profile, null);
+        if (request.getRequestedTemplateId() == null && request.getCertificateType() != EmploymentCertificateType.VISA && request.getLanguage() == CertificateLanguage.CHINESE) generateStandard(request, employee, profile);
+        else generateVisa(request, employee, profile, null);
         EmploymentCertificateRequest saved = requestRepository.save(request);
         auditService.log(
                 actor,
@@ -288,6 +290,7 @@ public class EmploymentCertificateService {
                             request.getLanguage()
                     )
                     .filter(this::isApprovedAndActive)
+                    .filter(t -> "COMPANY".equals(t.getTemplateSource()))
                     .orElse(null);
         }
         if (template == null) {
@@ -317,6 +320,7 @@ public class EmploymentCertificateService {
         request.setGeneratedAt(LocalDateTime.now());
         request.setGenerationError(null);
         request.setStatus(CertificateRequestStatus.GENERATED);
+        if (signing != null) signing.enqueue(request);
     }
 
     private void markGenerationFailed(EmploymentCertificateRequest request, RuntimeException exception) {
@@ -395,10 +399,15 @@ public class EmploymentCertificateService {
                 request.getGeneratedAt(),
                 request.getStatus() == CertificateRequestStatus.PENDING_HR,
                 request.getStatus() == CertificateRequestStatus.GENERATED
-                        && request.getGeneratedFileStorageKey() != null
+                        && request.getGeneratedFileStorageKey() != null,
+                templateValues(request)
         );
     }
 
+    private java.util.Map<String,String> templateValues(EmploymentCertificateRequest request) {
+        if(request.getEncryptedTemplateValues()==null)return java.util.Map.of();
+        try{return new com.fasterxml.jackson.databind.ObjectMapper().readValue(templateCrypto.decrypt(request.getEncryptedTemplateValues()),new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String,String>>(){});}catch(Exception e){throw new IllegalStateException("模板字段读取失败",e);}
+    }
     private List<String> missingProfileFields(
             EmploymentCertificateRequest request,
             UserAccount employee
@@ -421,6 +430,11 @@ public class EmploymentCertificateService {
         if (request.isIncludeSalary() && (profile == null || profile.getMonthlySalary() == null)) {
             missing.add("薪资信息");
         }
+        if(request.getRequestedTemplateId()!=null&&!templateValues(request).isEmpty()){
+            var supplied=templateValues(request);
+            var labels=java.util.Map.of("legalName","法定姓名","department","部门","title","岗位","entryDate","入职日期","englishName","英文姓名","passportNumber","护照号码","passportExpiryDate","护照有效期","monthlySalary","薪资信息");
+            labels.forEach((key,label)->{if(supplied.containsKey(key)){CertificateTemplatePreparationService.validateValue(key,supplied.get(key));missing.remove(label);}});
+        }
         return missing;
     }
 
@@ -430,6 +444,9 @@ public class EmploymentCertificateService {
         }
         if (isBlank(input.purpose())) {
             throw AppException.badRequest("请填写证明用途");
+        }
+        if (input.certificateType() == EmploymentCertificateType.INCOME && input.language() != CertificateLanguage.CHINESE) {
+            throw AppException.badRequest("收入证明当前支持中文，请选择中文后提交");
         }
         if (input.purpose().trim().length() > 200) {
             throw AppException.badRequest("证明用途不能超过 200 个字符");
@@ -467,9 +484,14 @@ public class EmploymentCertificateService {
                 ? clean(input.destinationCountry()) : null);
         request.setConsulateName(input.certificateType() == EmploymentCertificateType.VISA
                 ? clean(input.consulateName()) : null);
-        request.setIncludeSalary(input.includeSalary());
+        request.setIncludeSalary(input.includeSalary() || input.certificateType() == EmploymentCertificateType.INCOME);
         request.setRemarks(clean(input.remarks()));
         request.setStatus(CertificateRequestStatus.PENDING_HR);
+        if (input.templateValues() != null && !input.templateValues().isEmpty()) {
+            if (input.templateValues().size() > 60) throw AppException.badRequest("模板字段不能超过 60 项");
+            input.templateValues().forEach((k,v) -> { if (k == null || !k.matches("[^{}\\r\\n]{1,60}") || v == null || v.isBlank() || v.length() > 1000 || v.contains("{{") || v.contains("${") || v.contains("【")) throw AppException.badRequest("请填写有效的模板字段内容（每项最多 1000 字）"); if (CertificateTemplateFields.LABELS.containsKey(CertificateTemplateFields.key(k))) {if(input.requestedTemplateId()==null||templatePreparation==null||!k.equals(CertificateTemplateFields.key(k)))throw AppException.badRequest("员工档案字段由系统填入，请勿覆盖");templatePreparation.validateSupplement(actor,k,v);} });
+            try { request.setEncryptedTemplateValues(templateCrypto.encrypt(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(input.templateValues()))); } catch (java.io.IOException e) { throw new IllegalStateException(e); }
+        }
         request.setSubmittedAt(LocalDateTime.now());
         return request;
     }
@@ -509,16 +531,15 @@ public class EmploymentCertificateService {
     ) {
         Long templateId = input.requestedTemplateId();
         if (templateId == null) {
-            return;
-        }
-        if (input.certificateType() != EmploymentCertificateType.VISA) {
-            throw AppException.badRequest("员工上传的专用模板只能用于出境或签证在职证明");
+            var selected=templateService.companyDefault(actor,input.language(),input.destinationCountry(),input.consulateName());
+            if (selected.isEmpty()) return;
+            templateId=selected.get().getId();
         }
 
         EmploymentCertificateTemplate template = templateRepository
                 .findByIdAndTenantId(templateId, actor.getTenantId())
                 .orElseThrow(() -> AppException.notFound("指定的证明模板不存在"));
-        if (!actor.getId().equals(template.getUploadedByEmployeeId())) {
+        if (!actor.getId().equals(template.getUploadedByEmployeeId()) && !("COMPANY".equals(template.getTemplateSource()) && isApprovedAndActive(template))) {
             throw AppException.forbidden("只能使用当前员工本人上传的证明模板");
         }
         CertificateTemplateReviewStatus status = template.getReviewStatus();
@@ -528,12 +549,13 @@ public class EmploymentCertificateService {
             throw AppException.badRequest("该证明模板已被驳回或取消，请重新上传");
         }
 
+        if (template.getLanguage() != input.language()) throw AppException.badRequest("模板语言与申请语言不一致");
         request.setRequestedTemplateId(template.getId());
         request.setRequestedTemplateFileName(template.getSourceFileName());
     }
 
     private EmploymentCertificateRequest requireRequest(Long tenantId, Long requestId) {
-        return requestRepository.findByIdAndTenantId(requestId, tenantId)
+        return requestRepository.lockForUpdate(requestId, tenantId)
                 .orElseThrow(() -> AppException.notFound("证明申请不存在"));
     }
 

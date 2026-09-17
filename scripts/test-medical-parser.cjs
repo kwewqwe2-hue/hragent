@@ -1,0 +1,10 @@
+// Synthetic documents only. No authentication, employee records or business submissions.
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process');
+(async()=>{
+ const pw=require(path.join(process.env.USERPROFILE,'.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'));
+ const browser=await pw.chromium.launch({channel:'msedge',headless:true});const folder='.artifacts/leave-medical';fs.mkdirSync(folder,{recursive:true});
+ try{const page=await browser.newPage({viewport:{width:900,height:650}});await page.setContent('<html><meta charset="utf-8"><body style="font:28px Microsoft YaHei;background:white;padding:40px;line-height:1.8"><h2>某某医院 · 门诊病历</h2><p>姓名：测试员工　性别：男</p><p>就诊日期：2026-09-08</p><p>诊断：合成测试材料</p><p>医嘱：仅供软件测试，无医疗效力</p></body></html>');await page.screenshot({path:folder+'/synthetic-record.png'});await page.pdf({path:folder+'/synthetic-record.pdf',printBackground:true});}finally{await browser.close()}
+ const payload=JSON.stringify(['pdf','png'].map(ext=>({ext,data:fs.readFileSync(folder+'/synthetic-record.'+ext).toString('base64')})));
+ const python=`import json,urllib.request\nfixtures=json.loads('''${payload}''')\nfor f in fixtures:\n url='http://hragent-n8n-pdf-parser:3000/extract' if f['ext']=='pdf' else 'http://localhost:8000/ocr'\n req=urllib.request.Request(url,data=json.dumps({'data':f['data']}).encode(),headers={'Content-Type':'application/json'})\n result=json.load(urllib.request.urlopen(req,timeout=80))\n text=''.join(result.get('text','').split())\n assert result.get('success') and '病历' in text and '测试员工' in text and '2026' in text, 'Incomplete extraction'\n print('PASS: local '+f['ext']+' extraction, patient and date readable; characters='+str(len(text)))\n`;
+ const r=spawnSync('docker',['exec','-i','hragent-n8n-ocr','python','-'],{input:python,encoding:'utf8',timeout:180000});if(r.stdout)console.log(r.stdout.trim());if(r.stderr)console.error(r.stderr.trim());assert.equal(r.status,0,'Local parsers must extract synthetic medical text');
+})().catch(e=>{console.error(e);process.exitCode=1});

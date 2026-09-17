@@ -53,7 +53,7 @@ public class AgentNotificationService {
                             request.getReason()
                     )
                     + " 可直接点击钉钉审批卡片，也可以回复“同意 #" + request.getId() + "”或“拒绝 #"
-                    + request.getId() + " 原因”，或在 SaaS 主管待办中处理。";
+                    + request.getId() + " 原因”，或在 Agent AI 的请假审批弹窗中处理。";
             enqueue(request, request.getManagerId(), LEAVE_SUBMITTED, message);
             return;
         }
@@ -107,7 +107,7 @@ public class AgentNotificationService {
 
     private void enqueueHrPending(LeaveRequest request) {
         UserAccount employee = requireUser(request.getEmployeeId());
-        String message = "【请假待备案】%s（%s）的%s申请 #%d 已由主管通过。日期：%s 至 %s，共 %s 天。请在 SaaS HR 待办中完成备案。"
+        String message = "【请假待审核】%s（%s）的%s申请 #%d 已进入 HR 审核阶段。日期：%s 至 %s，共 %s 天。请在 Agent AI 的请假审批弹窗中审核并完成备案。"
                 .formatted(
                         employee.getName(),
                         employee.getEmployeeNo(),
@@ -120,6 +120,7 @@ public class AgentNotificationService {
         userAccountRepository.findByTenantIdAndRole(request.getTenantId(), Role.HR)
                 .stream()
                 .filter(UserAccount::isActive)
+                .filter(hr -> !hr.getId().equals(request.getEmployeeId()))
                 .forEach(hr -> enqueue(request, hr.getId(), LEAVE_PENDING_HR, message));
     }
 

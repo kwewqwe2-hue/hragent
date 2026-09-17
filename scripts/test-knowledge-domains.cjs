@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const ts=require('../hragentv1/frontend/node_modules/typescript');
+const context={exports:{},URL};vm.createContext(context);vm.runInContext(ts.transpileModule(fs.readFileSync('hragentv1/frontend/src/utils/knowledgeTopics.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,context);
+const {policyDomain,groupPolicies}=context.exports;
+const a=(x={})=>({id:1,title:'年假制度',content:'正文',source:'未标注',category:'休假与考勤',region:'全国',reviewStatus:'APPROVED',...x});
+assert.equal(policyDomain(a({sourceUrl:'https://www.gov.cn/example.html'})),'public');
+assert.equal(policyDomain(a({sourceUrl:'https://rsj.sh.gov.cn/example.html'})),'public');
+assert.equal(policyDomain(a({sourceUrl:'https://www.gov.cn.evil.test/example.html'})),'company');
+assert.equal(policyDomain(a({sourceUrl:'https://www.gov.cn/example.html',category:'企业提供制度'})),'company');
+assert.equal(policyDomain(a({source:'CHR-RS-17 A0',region:'全国'})),'company');
+assert.equal(policyDomain(a({source:'hrmanual.pdf · 2022年版',category:'员工手册参考'})),'public');
+assert.equal(policyDomain(a({source:'国务院令；https://www.gov.cn/example.html',category:'中国劳动法规'})),'public');
+assert.equal(policyDomain(a({category:'政策法规'})),'public');
+assert.equal(policyDomain(a({source:'演示',sourceUrl:'https://www.gov.cn/example.html'})),'company');
+const versions=groupPolicies([a({effectiveFrom:'2025-01-01'}),a({id:2,effectiveFrom:'2026-01-01'})]);assert.equal(versions.length,2);
+// Exercise the actual progress component with synthetic API responses and Vue reactivity.
+const vue=require('../hragentv1/frontend/node_modules/vue');let source=fs.readFileSync('hragentv1/frontend/src/components/PolicyUpdateBubble.vue','utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm,'');source+='\nglobalThis.subject={load,start,status,summary,error};';
+let next={asOf:'2026-09-11',running:true,enabled:true,pendingCount:3,approvedCount:2,checks:[],progress:{sourcesFinished:1,sourcesTotal:4}},events=[],destroy,fail=false;
+const ctx={...vue,exports:{},defineProps:()=>({isHr:false}),defineEmits:()=>((e)=>events.push(e)),onMounted:()=>{},onBeforeUnmount:f=>destroy=f,getData:async()=>{if(fail)throw Error();return structuredClone(next)},postData:async()=>{},document:{visibilityState:'visible',removeEventListener(){}},clearInterval(){}};
+vm.createContext(ctx);vm.runInContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,ctx);
+(async()=>{let s=ctx.subject;await s.load();assert.match(s.summary.value,/1\/4/);assert.equal(events.length,0);next.approvedCount=3;next.running=false;next.checks=[{error:'超时'}];await s.load();assert.deepEqual(events,['updated']);assert.match(s.summary.value,/重试/);fail=true;await s.load();assert.match(s.summary.value,/暂时没有/);destroy();console.log('PASS: official/company/reference isolation, version separation, progress updates, approval refresh, source errors and unmount guards');})().catch(e=>{console.error(e);process.exitCode=1});

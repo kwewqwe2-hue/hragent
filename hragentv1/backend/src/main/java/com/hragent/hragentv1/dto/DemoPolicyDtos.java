@@ -80,7 +80,13 @@ public final class DemoPolicyDtos {
 
     public record ReviewRequest(
             @NotNull PolicyReviewStatus decision,
-            @Size(max = 600) String opinion
+            @Size(max = 600) String opinion,
+            LocalDate effectiveAt,
+            @Size(max = 80) String region,
+            LocalDate effectiveTo,
+            LocalDate publishedAt
     ) {
+        public ReviewRequest(PolicyReviewStatus decision, String opinion) { this(decision, opinion, null, null, null, null); }
+        public ReviewRequest(PolicyReviewStatus decision, String opinion, LocalDate effectiveAt, String region) { this(decision, opinion, effectiveAt, region, null, null); }
     }
 }

@@ -28,8 +28,10 @@ public class EmploymentCertificateDtos {
             @Size(max = 160) String consulateName,
             boolean includeSalary,
             @Size(max = 600) String remarks,
-            Long requestedTemplateId
+            Long requestedTemplateId,
+            java.util.Map<String,String> templateValues
     ) {
+        public CreateRequest(EmploymentCertificateType t, CertificateLanguage l, String p, String d, String c, boolean salary, String remarks, Long id) { this(t,l,p,d,c,salary,remarks,id,java.util.Map.of()); }
         public CreateRequest(
                 EmploymentCertificateType certificateType,
                 CertificateLanguage language,
@@ -88,7 +90,8 @@ public class EmploymentCertificateDtos {
             String generationError,
             LocalDateTime generatedAt,
             boolean canCancel,
-            boolean documentReady
+            boolean documentReady,
+            java.util.Map<String,String> templateValues
     ) {
     }
 }

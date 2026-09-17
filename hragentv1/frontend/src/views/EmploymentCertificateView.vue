@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h1>{{ isHr ? '在职证明管理' : '在职证明' }}</h1>
-        <p>提交证明申请并查看审核及文件生成状态。</p>
+        <p>选择公司模板或上传个人模板，核对内容，审核后生成并完成腾讯电子签章。</p>
       </div>
       <el-tooltip content="刷新" placement="bottom">
         <el-button :icon="Refresh" circle :loading="loading" aria-label="刷新" @click="load" />
@@ -13,9 +13,11 @@
     <el-tabs v-if="isHr" v-model="activeTab" class="certificate-tabs">
       <el-tab-pane label="我的申请" name="mine" />
       <el-tab-pane label="HR 审批" name="review" />
-      <el-tab-pane label="签证模板" name="templates" />
+      <el-tab-pane label="公司模板" name="templates" />
+      <el-tab-pane label="腾讯电子签" name="esign" />
     </el-tabs>
 
+    <CertificateEsignSettings v-if="activeTab === 'esign' && isHr" />
     <template v-if="activeTab === 'mine'">
       <el-row :gutter="16">
         <el-col :xs="24" :lg="9">
@@ -52,7 +54,15 @@
                 <el-form-item label="领事馆或受理机构" required>
                   <el-input v-model="form.consulateName" maxlength="160" />
                 </el-form-item>
-                <el-form-item label="专用 DOCX 模板（可选）">
+              </template>
+              <el-form-item label="是否需要自行提供模板？" required>
+                <el-radio-group v-model="templateSource" @change="clearTemplateSelection"><el-radio value="COMPANY">公司模板</el-radio><el-radio value="PERSONAL">自行上传</el-radio></el-radio-group>
+              </el-form-item>
+              <el-form-item v-if="templateSource === 'COMPANY'" label="公司规定模板">
+                <el-select v-model="form.requestedTemplateId" clearable placeholder="公司默认模板" style="width:100%"><el-option v-for="t in companyTemplates" :key="t.id" :label="t.name" :value="t.id" /></el-select>
+              </el-form-item>
+              <template v-if="templateSource === 'PERSONAL'">
+                <el-form-item label="上传所需 DOCX 模板">
                   <input
                     ref="requestTemplateFileInput"
                     class="file-picker"
@@ -76,7 +86,7 @@
                       show-icon
                     />
                     <div v-if="requestTemplatePreview.placeholders.length" class="preview-tags">
-                      <el-tag v-for="item in requestTemplatePreview.placeholders" :key="item" size="small">{{ item }}</el-tag>
+                      <el-tag v-for="item in requestTemplatePreview.placeholders" :key="item" size="small">{{ fieldLabel(item) }}</el-tag>
                     </div>
                     <div v-if="requestTemplatePreview.unsupportedPlaceholders.length" class="preview-tags">
                       <el-tag
@@ -84,7 +94,7 @@
                         :key="item"
                         type="danger"
                         size="small"
-                      >{{ item }}</el-tag>
+                      >{{ fieldLabel(item) }}</el-tag>
                     </div>
                     <ul v-if="requestTemplatePreview.warnings.length" class="preview-warnings">
                       <li v-for="warning in requestTemplatePreview.warnings" :key="warning">{{ warning }}</li>
@@ -95,6 +105,7 @@
                   <el-input v-model="requestTemplateName" maxlength="120" />
                 </el-form-item>
               </template>
+              <el-form-item v-for="field in customFields" :key="field" :label="field" required><el-input v-model="form.templateValues[field]" maxlength="1000" /></el-form-item>
               <el-form-item label="证明中显示薪资">
                 <el-switch v-model="form.includeSalary" />
               </el-form-item>
@@ -125,6 +136,8 @@
                     <div v-if="row.requestedTemplateFileName"><span>提交模板</span><strong>{{ row.requestedTemplateFileName }}</strong></div>
                     <div v-if="row.sourceTemplateFileName"><span>使用模板</span><strong>{{ row.sourceTemplateFileName }}</strong></div>
                     <div v-if="row.generationError"><span>生成说明</span><strong>{{ row.generationError }}</strong></div>
+                    <div v-for="(value,key) in row.templateValues" :key="key"><span>{{ key }}</span><strong>{{ value }}</strong></div>
+                    <CertificateSignStatus v-if="row.documentReady" :id="row.id" :hr="isHr" />
                   </div>
                 </template>
               </el-table-column>
@@ -137,8 +150,8 @@
               </el-table-column>
               <el-table-column label="操作" width="70">
                 <template #default="{ row }">
-                  <el-tooltip v-if="row.documentReady" content="下载 Word" placement="top">
-                    <el-button :icon="Download" circle aria-label="下载 Word" @click="downloadDocument(row)" />
+                  <el-tooltip v-if="row.documentReady" content="下载 PDF（签章完成后为正式版）" placement="top">
+                    <el-button :icon="Download" circle aria-label="下载证明 PDF" @click="downloadDocument(row)" />
                   </el-tooltip>
                   <el-button v-else-if="row.canCancel" type="danger" link @click="cancel(row.id)">取消</el-button>
                   <span v-else class="muted">-</span>
@@ -188,6 +201,8 @@
               </div>
               <div v-if="row.sourceTemplateFileName"><span>使用模板</span><strong>{{ row.sourceTemplateFileName }}</strong></div>
               <div v-if="row.generationError"><span>生成说明</span><strong>{{ row.generationError }}</strong></div>
+              <div v-for="(value,key) in row.templateValues" :key="key"><span>{{ key }}</span><strong>{{ value }}</strong></div>
+              <CertificateSignStatus v-if="row.documentReady" :id="row.id" :hr="isHr" />
             </div>
           </template>
         </el-table-column>
@@ -223,17 +238,17 @@
         <el-table-column label="提交时间" width="135">
           <template #default="{ row }">{{ formatDateTime(row.submittedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <template v-if="row.status === 'PENDING_HR'">
+            <div v-if="row.status === 'PENDING_HR'" class="certificate-review-actions">
               <el-button type="success" size="small" :icon="Check" @click="review(row, true)">通过</el-button>
               <el-button type="danger" size="small" :icon="Close" @click="review(row, false)">驳回</el-button>
-            </template>
-            <el-tooltip v-else-if="row.documentReady" content="下载 Word" placement="left">
-              <el-button :icon="Download" circle aria-label="下载 Word" @click="downloadDocument(row)" />
+            </div>
+            <el-tooltip v-else-if="row.documentReady" content="下载 PDF（签章完成后为正式版）" placement="left">
+              <el-button :icon="Download" circle aria-label="下载证明 PDF" @click="downloadDocument(row)" />
             </el-tooltip>
             <el-button
-              v-else-if="row.certificateType === 'VISA' && ['APPROVED', 'GENERATION_FAILED'].includes(row.status)"
+              v-else-if="['APPROVED', 'GENERATION_FAILED'].includes(row.status)"
               type="primary"
               size="small"
               :icon="Refresh"
@@ -245,11 +260,11 @@
       </el-table>
     </section>
 
-    <section v-else class="content-panel template-panel">
+    <section v-else-if="activeTab === 'templates'" class="content-panel template-panel">
       <div class="review-toolbar">
         <div>
-          <div class="section-heading">签证/领事馆模板</div>
-          <div class="panel-hint">HR 审核后，系统按目的国家、受理机构和语言匹配最新启用模板。</div>
+          <div class="section-heading">证明模板管理</div>
+          <div class="panel-hint">公司模板统一维护；员工自备模板与对应申请一起审核。通用公司模板的国家、受理机构填写“通用”。</div>
         </div>
         <el-button type="primary" :icon="Upload" @click="openTemplateUpload">上传 Word 模板</el-button>
       </div>
@@ -299,7 +314,7 @@
       v-model="templateUploadVisible"
       class="template-upload-dialog"
       body-class="template-upload-dialog__body"
-      title="上传签证/领事馆 Word 模板"
+      title="上传公司规定的 Word 模板"
       width="min(560px, calc(100vw - 32px))"
       align-center
       @closed="resetTemplateUpload"
@@ -331,13 +346,13 @@
             <div v-if="templatePreview.placeholders.length" class="preview-line">
               <span>已识别字段</span>
               <div class="preview-tags">
-                <el-tag v-for="item in templatePreview.placeholders" :key="item" size="small">{{ item }}</el-tag>
+                <el-tag v-for="item in templatePreview.placeholders" :key="item" size="small">{{ fieldLabel(item) }}</el-tag>
               </div>
             </div>
             <div v-if="templatePreview.unsupportedPlaceholders.length" class="preview-line preview-error">
               <span>不支持字段</span>
               <div class="preview-tags">
-                <el-tag v-for="item in templatePreview.unsupportedPlaceholders" :key="item" type="danger" size="small">{{ item }}</el-tag>
+                <el-tag v-for="item in templatePreview.unsupportedPlaceholders" :key="item" type="danger" size="small">{{ fieldLabel(item) }}</el-tag>
               </div>
             </div>
             <ul v-if="templatePreview.warnings.length" class="preview-warnings">
@@ -371,8 +386,8 @@
           <el-input v-model="templateForm.consulateName" maxlength="160" placeholder="例如：德国驻华大使馆" />
         </el-form-item>
         <el-alert
-          title="模板使用 {{fieldName}} 占位符"
-          description="支持 legalName、englishName、employeeNo、department、title、entryDate、passportNumber、passportExpiryDate、monthlySalary、currency、companyName、issueDate、purpose、destinationCountry、consulateName。"
+          title="模板字段示例：姓名、职位、入职日期"
+          description="支持 {{legalName}}、【姓名】、姓名：____ 等字段。请在盖章位置保留“公司盖章处”。通用模板的国家和受理机构可填写“通用”。"
           type="info"
           :closable="false"
         />
@@ -386,7 +401,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import CertificateEsignSettings from '../components/CertificateEsignSettings.vue'
+import CertificateSignStatus from '../components/CertificateSignStatus.vue'
 import dayjs from 'dayjs'
 import { Check, Close, Download, Refresh, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -410,6 +427,7 @@ import type {
 } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 
+const fieldLabel=(value:string)=>{const key=value.replace(/^\{\{|}}$/g,'');const labels:Record<string,string>={legalName:'姓名',englishName:'英文姓名',employeeNo:'工号',department:'部门',title:'职位',entryDate:'入职日期',passportNumber:'护照号码',passportExpiryDate:'护照有效期',monthlySalary:'月薪',currency:'币种',companyName:'公司名称',issueDate:'开具日期',purpose:'用途',destinationCountry:'目的国家',consulateName:'受理机构'};return labels[key]||key}
 const auth = useAuthStore()
 const isHr = computed(() => auth.user?.role === 'HR')
 const activeTab = ref(isHr.value ? 'review' : 'mine')
@@ -432,7 +450,16 @@ const requestTemplateName = ref('')
 const requestTemplatePreviewLoading = ref(false)
 const requestTemplatePreview = ref<EmploymentCertificateTemplatePreview | null>(null)
 
+const templateSource = ref<'COMPANY' | 'PERSONAL' | ''>('')
+const companyTemplates = computed(() => templates.value.filter(t => t.templateSource === 'COMPANY' && t.active && t.reviewStatus === 'APPROVED' && t.language === form.language))
+const customFields = computed(() => requestTemplatePreview.value?.unsupportedPlaceholders.map(v => v.replace(/^\{\{|}}$/g, '')) || [])
+function clearTemplateSelection() {
+  requestTemplateFile.value=null; requestTemplatePreview.value=null; form.requestedTemplateId=null; form.templateValues={}
+  if(templateSource.value==='COMPANY') form.requestedTemplateId=companyTemplates.value.find(t => t.destinationCountry === (form.certificateType==='VISA'?form.destinationCountry:'通用') && t.consulateName === (form.certificateType==='VISA'?form.consulateName:'通用'))?.id ?? null
+}
 const form = reactive({
+  requestedTemplateId: null as number | null,
+  templateValues: {} as Record<string,string>,
   certificateType: 'STANDARD' as EmploymentCertificateType,
   language: 'CHINESE' as CertificateLanguage,
   purpose: '',
@@ -442,11 +469,19 @@ const form = reactive({
   remarks: ''
 })
 
+watch(() => form.requestedTemplateId, async (id) => {
+  if (templateSource.value !== 'COMPANY') return
+  requestTemplatePreview.value=null;form.templateValues={}
+  if(!id)return
+  requestTemplatePreviewLoading.value=true
+  try{const preview=await getData<EmploymentCertificateTemplatePreview>(`/employment-certificate-templates/${id}/preview`);if(form.requestedTemplateId===id)requestTemplatePreview.value=preview}finally{requestTemplatePreviewLoading.value=false}
+})
+watch(() => form.language, () => {form.requestedTemplateId=null;requestTemplatePreview.value=null;form.templateValues={};requestTemplateFile.value=null})
 const templateForm = reactive({
   name: '',
-  destinationCountry: '',
-  consulateName: '',
-  language: 'BILINGUAL' as CertificateLanguage
+  destinationCountry: '通用',
+  consulateName: '通用',
+  language: 'CHINESE' as CertificateLanguage
 })
 
 const filteredHrRequests = computed(() => statusFilter.value === 'ALL'
@@ -463,6 +498,7 @@ async function load() {
     ])
     options.value = loadedOptions
     myRequests.value = loadedMine
+    templates.value = await getData<EmploymentCertificateTemplate[]>('/employment-certificate-templates')
     if (isHr.value) {
       const [loadedHrRequests, loadedTemplates] = await Promise.all([
         getData<EmploymentCertificateRequest[]>('/employment-certificates/hr/all'),
@@ -477,6 +513,10 @@ async function load() {
 }
 
 async function submit() {
+  if (!templateSource.value) { ElMessage.warning('请选择公司模板，或自行上传你需要的模板'); return }
+  if (templateSource.value === 'PERSONAL' && !requestTemplateFile.value) { ElMessage.warning('请先上传模板'); return }
+  if (customFields.value.some(k => !form.templateValues[k]?.trim())) { ElMessage.warning('请补齐模板字段'); return }
+  if (requestTemplatePreviewLoading.value) { ElMessage.info('正在读取模板字段，请稍候'); return }
   if (!form.purpose.trim()) {
     ElMessage.warning('请填写证明用途')
     return
@@ -502,6 +542,8 @@ async function submit() {
       }
       await createCertificateWithTemplate(requestTemplateFile.value, {
         templateName: requestTemplateName.value,
+        certificateType: form.certificateType,
+        templateValues: form.templateValues,
         language: form.language,
         purpose: form.purpose,
         destinationCountry: form.destinationCountry,
@@ -514,6 +556,8 @@ async function submit() {
       await postData('/employment-certificates', form)
       ElMessage.success('申请已提交，等待 HR 审核')
     }
+    clearTemplateSelection()
+    templateSource.value=''
     resetForm()
     await load()
   } finally {
@@ -541,7 +585,10 @@ function onRequestTemplateChange(event: Event) {
 async function previewRequestTemplate(file: File) {
   requestTemplatePreviewLoading.value = true
   try {
-    requestTemplatePreview.value = await previewCertificateTemplate(file)
+    const preview = await previewCertificateTemplate(file)
+    if (requestTemplateFile.value !== file) return
+    requestTemplatePreview.value = preview
+    form.templateValues = {}
   } catch {
     requestTemplatePreview.value = null
   } finally {
@@ -595,11 +642,12 @@ async function review(row: EmploymentCertificateRequest, approved: boolean) {
 }
 
 async function downloadDocument(row: EmploymentCertificateRequest) {
-  await downloadBinary(
-    `/employment-certificates/${row.id}/download`,
-    row.generatedFileName || `在职证明-${row.employeeNo}.docx`
-  )
-  ElMessage.success('Word 文件已下载')
+  try {
+    const sign = await getData<{signed:boolean}>(`/employment-certificates/${row.id}/esign`)
+    await downloadBinary(`/employment-certificates/${row.id}/pdf`, `在职证明-${row.employeeNo}-${sign.signed?'已签章':'未签章预览'}.pdf`)
+    if(sign.signed) ElMessage.success('已签章 PDF 已下载')
+    else ElMessage.info('未签章预览已下载，正式版需要等待电子签章完成')
+  } catch (e:any) { ElMessage.error(e.message || '下载失败，请稍后重试') }
 }
 
 async function downloadRequestedTemplate(row: EmploymentCertificateRequest) {
@@ -889,6 +937,19 @@ onMounted(load)
   width: 210px;
 }
 
+.certificate-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.certificate-review-actions :deep(.el-button) {
+  margin: 0;
+  flex-shrink: 0;
+  min-width: 64px;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -927,4 +988,4 @@ onMounted(load)
     grid-template-columns: 1fr;
   }
 }
-</style>
+.preview-tags :deep(.el-tag){color:#285f83;background:#edf5fa;border-color:#bed7e6;opacity:1}</style>

@@ -1,0 +1,41 @@
+services:
+  mysql:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cloud
+    ports: !reset []
+
+  frontend:
+    # Public traffic is terminated by the cloud proxy. Keep the application
+    # port reachable only from the host so it cannot bypass HTTPS.
+    ports: !override
+      - "127.0.0.1:5173:80"
+
+  chat:
+    ports: !override
+      - "127.0.0.1:5174:80"
+
+  proxy:
+    image: caddy:2.8-alpine
+    container_name: hragent-cloud-proxy
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN in hragentv1/.env}
+      CHAT_DOMAIN: ${CHAT_DOMAIN:?Set CHAT_DOMAIN in hragentv1/.env}
+      N8N_DOMAIN: ${N8N_DOMAIN:?Set N8N_DOMAIN in hragentv1/.env}
+      CADDY_EMAIL: ${CADDY_EMAIL:?Set CADDY_EMAIL in hragentv1/.env}
+    volumes:
+      - ../cloud/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

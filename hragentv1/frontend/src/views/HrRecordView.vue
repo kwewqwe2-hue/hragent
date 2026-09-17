@@ -18,6 +18,7 @@
               <p><strong>AI 摘要：</strong>{{ row.aiSummary }}</p>
               <p><strong>主管意见：</strong>{{ row.managerOpinion }}</p>
               <p><strong>知识库依据：</strong>{{ row.aiEvidence }}</p>
+              <LeaveMedicalReview v-if="row.medicalRecordId" :id="row.id" reviewer />
             </div>
           </template>
         </el-table-column>
@@ -45,6 +46,7 @@ import { Check, Close, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getData, putData } from '../api/http'
 import type { LeaveRequest } from '../api/types'
+import LeaveMedicalReview from '../components/LeaveMedicalReview.vue'
 
 const requests = ref<LeaveRequest[]>([])
 

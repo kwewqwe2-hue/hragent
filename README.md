@@ -214,6 +214,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-hragent-local.ps1
 
 ## 日常运行
 
+员工日常服务新增制度精准匹配、收入证明、城市办事准备清单和事件提醒，使用及配置见 [员工自助服务说明](docs/EMPLOYEE-SELF-SERVICE.md)。入职关怀、EAP、匿名申诉、人工介入、团队汇总洞察与知识反哺的使用方式见 [员工关系服务与组织运营](docs/EMPLOYEE-RELATIONS.md)。
+
 Docker Desktop 已启动时：
 
 ```powershell

@@ -35,6 +35,7 @@ app:
   encryption-key: ${APP_ENCRYPTION_KEY:local-demo-secret-change-me}
   web-chat:
     identity-secret: ${APP_WEB_CHAT_IDENTITY_SECRET:local-demo-web-chat-identity-secret}
+    workflow-enabled: ${WEB_CHAT_WORKFLOW_ENABLED:true}
     n8n-webhook-url: ${N8N_WEB_CHAT_WEBHOOK_URL:http://localhost:5678/webhook/hragent-dingtalk-8a2d811d-0fe5-4198-8e61-288ec417fc04}
     n8n-attachment-parse-url: ${N8N_WEB_ATTACHMENT_PARSE_URL:http://localhost:5678/webhook/hragent-web-attachment-parse}
     attachment-internal-key: ${WEB_ATTACHMENT_INTERNAL_KEY:local-demo-web-attachment-internal-key-change-me}

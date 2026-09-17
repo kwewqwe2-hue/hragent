@@ -35,6 +35,7 @@ public class LeaveService {
     private final AuditService auditService;
     private final WorkdayService workdayService;
     private final AgentNotificationService agentNotificationService;
+    private final LeaveMedicalService medical;
 
     public LeaveService(
             LeaveBalanceRepository leaveBalanceRepository,
@@ -43,7 +44,8 @@ public class LeaveService {
             AssistantService assistantService,
             AuditService auditService,
             WorkdayService workdayService,
-            AgentNotificationService agentNotificationService
+            AgentNotificationService agentNotificationService,
+            LeaveMedicalService medical
     ) {
         this.leaveBalanceRepository = leaveBalanceRepository;
         this.leaveRequestRepository = leaveRequestRepository;
@@ -52,6 +54,7 @@ public class LeaveService {
         this.auditService = auditService;
         this.workdayService = workdayService;
         this.agentNotificationService = agentNotificationService;
+        this.medical = medical;
     }
 
     public List<LeaveDtos.LeaveTypeOption> leaveTypes() {
@@ -97,7 +100,7 @@ public class LeaveService {
             LeaveDtos.CreateLeaveRequest request
     ) {
         requireLeaveEligible(employee);
-        UserAccount manager = activeManager(employee);
+        UserAccount manager = resolveInitialReviewer(employee);
         if (request.endDate().isBefore(request.startDate())) {
             throw AppException.badRequest("结束日期不能早于开始日期");
         }
@@ -142,7 +145,7 @@ public class LeaveService {
             LeaveDtos.CreateLeaveRequest request
     ) {
         requireLeaveEligible(employee);
-        activeManager(employee);
+        resolveInitialReviewer(employee);
         return create(employee, request);
     }
 
@@ -155,9 +158,25 @@ public class LeaveService {
                 .orElseThrow(() -> AppException.badRequest("当前员工的直属主管不存在或已停用"));
     }
 
+    private UserAccount resolveInitialReviewer(UserAccount employee) {
+        if (employee.getManagerId() != null) {
+            UserAccount manager = userAccountRepository.findById(employee.getManagerId())
+                    .filter(UserAccount::isActive)
+                    .orElse(null);
+            if (manager != null) {
+                return manager;
+            }
+        }
+        return userAccountRepository.findByTenantIdAndRole(employee.getTenantId(), Role.HR).stream()
+                .filter(UserAccount::isActive)
+                .findFirst()
+                .orElseThrow(() -> AppException.badRequest("当前空间没有可处理申请的直属主管或 HR 管理员"));
+    }
+
     @Transactional
     public LeaveDtos.LeaveRequestView create(UserAccount employee, LeaveDtos.CreateLeaveRequest request) {
         requireLeaveEligible(employee);
+        if(request.leaveType()==LeaveType.SICK)medical.validate(employee,request.medicalRecordId(),request.startDate(),request.endDate());
         if (request.endDate().isBefore(request.startDate())) {
             throw AppException.badRequest("结束日期不能早于开始日期");
         }
@@ -173,16 +192,12 @@ public class LeaveService {
                 null,
                 Set.of(RequestStatus.PENDING_MANAGER, RequestStatus.PENDING_HR, RequestStatus.APPROVED)
         );
-        Long reviewerId = employee.getManagerId();
-        RequestStatus initialStatus = RequestStatus.PENDING_MANAGER;
-        if (reviewerId == null || userAccountRepository.findById(reviewerId).filter(UserAccount::isActive).isEmpty()) {
-            reviewerId = userAccountRepository.findByTenantIdAndRole(employee.getTenantId(), Role.HR).stream()
-                    .filter(UserAccount::isActive)
-                    .map(UserAccount::getId)
-                    .findFirst()
-                    .orElseThrow(() -> AppException.badRequest("当前空间没有可处理申请的管理员"));
-            initialStatus = RequestStatus.PENDING_HR;
-        }
+        UserAccount reviewer = resolveInitialReviewer(employee);
+        Long reviewerId = reviewer.getId();
+        RequestStatus initialStatus = employee.getManagerId() != null
+                && employee.getManagerId().equals(reviewerId)
+                ? RequestStatus.PENDING_MANAGER
+                : RequestStatus.PENDING_HR;
 
         LeaveBalance balance = leaveBalanceRepository
                 .findByTenantIdAndEmployeeIdAndLeaveType(employee.getTenantId(), employee.getId(), request.leaveType())
@@ -219,6 +234,11 @@ public class LeaveService {
         leaveRequest.setAiEvidence(ai.evidence());
         leaveRequest.setSubmittedAt(LocalDateTime.now());
         leaveRequestRepository.save(leaveRequest);
+        if(request.leaveType()==LeaveType.SICK){
+            medical.bind(employee,request.medicalRecordId(),request.startDate(),request.endDate(),leaveRequest.getId());
+            leaveRequest.setMedicalRecordId(request.medicalRecordId());
+            leaveRequestRepository.save(leaveRequest);
+        }
         agentNotificationService.leaveCreated(leaveRequest);
 
         auditService.log(employee, "提交请假申请", "leave_request", leaveRequest.getId(),
@@ -285,6 +305,7 @@ public class LeaveService {
         return leaveRequestRepository
                 .findByTenantIdAndStatusOrderBySubmittedAtDesc(hr.getTenantId(), RequestStatus.PENDING_HR)
                 .stream()
+                .filter(request -> !request.getEmployeeId().equals(hr.getId()))
                 .map(this::toView)
                 .toList();
     }
@@ -298,7 +319,9 @@ public class LeaveService {
 
     @Transactional
     public LeaveDtos.LeaveRequestView managerReview(UserAccount manager, Long id, LeaveDtos.ReviewRequest request) {
+        if (manager.getRole() != Role.MANAGER) throw AppException.forbidden("仅主管可处理主管审批");
         LeaveRequest leaveRequest = findByIdAndTenant(id, manager.getTenantId());
+        if(leaveRequest.getEmployeeId().equals(manager.getId()))throw AppException.forbidden("不能审核本人申请");
         if (!leaveRequest.getManagerId().equals(manager.getId())) {
             throw AppException.forbidden("你只能审批自己下属提交的申请");
         }
@@ -322,7 +345,10 @@ public class LeaveService {
             Long id,
             LeaveDtos.ReviewRequest request
     ) {
+        // Keep the legacy integration entry point, but all channels now require HR review.
+        if (manager.getRole() != Role.MANAGER) throw AppException.forbidden("仅主管可处理主管审批");
         LeaveRequest leaveRequest = findByIdAndTenant(id, manager.getTenantId());
+        if (leaveRequest.getEmployeeId().equals(manager.getId())) throw AppException.forbidden("不能审核本人申请");
         if (!leaveRequest.getManagerId().equals(manager.getId())) {
             throw AppException.forbidden("只能处理自己直属下属的请假申请");
         }
@@ -331,56 +357,14 @@ public class LeaveService {
             return toView(leaveRequest);
         }
 
-        leaveRequest.setManagerOpinion(request.opinion());
-        leaveRequest.setManagerReviewedAt(LocalDateTime.now());
-        leaveRequest.setHrOpinion("系统自动备案");
-        leaveRequest.setHrRecordedAt(LocalDateTime.now());
-        if (request.approved()) {
-            recordApproved(leaveRequest);
-        } else {
-            leaveRequest.setStatus(RequestStatus.REJECTED);
-        }
-        leaveRequestRepository.save(leaveRequest);
-        agentNotificationService.leaveFinalized(leaveRequest);
-        auditService.log(manager, request.approved() ? "主管审批通过并自动备案" : "主管驳回请假申请",
-                "leave_request", leaveRequest.getId(), request.opinion());
-        return toView(leaveRequest);
-    }
-
-    private void recordApproved(LeaveRequest leaveRequest) {
-        UserAccount employee = userAccountRepository.findById(leaveRequest.getEmployeeId())
-                .orElseThrow(() -> AppException.notFound("员工档案不存在"));
-        ensureNoOverlappingRequest(
-                employee,
-                leaveRequest.getStartDate(),
-                leaveRequest.getEndDate(),
-                leaveRequest.getId(),
-                Set.of(RequestStatus.APPROVED)
-        );
-        BigDecimal chargeDays = BigDecimal.valueOf(workdayService
-                .workingDates(leaveRequest.getStartDate(), leaveRequest.getEndDate()).size());
-        if (chargeDays.signum() == 0) {
-            throw AppException.badRequest("申请日期范围内没有工作日");
-        }
-        LeaveBalance balance = leaveBalanceRepository
-                .findForUpdateByTenantIdAndEmployeeIdAndLeaveType(
-                        leaveRequest.getTenantId(),
-                        leaveRequest.getEmployeeId(),
-                        leaveRequest.getLeaveType()
-                )
-                .orElseThrow(() -> AppException.badRequest("没有配置该假别余额"));
-        if (balance.remainingDays().compareTo(chargeDays) < 0) {
-            throw AppException.badRequest("余额不足，无法完成自动备案");
-        }
-        balance.setUsedDays(balance.getUsedDays().add(chargeDays));
-        leaveBalanceRepository.save(balance);
-        leaveRequest.setDays(chargeDays);
-        leaveRequest.setStatus(RequestStatus.APPROVED);
+        return managerReview(manager, id, request);
     }
 
     @Transactional
     public LeaveDtos.LeaveRequestView hrRecord(UserAccount hr, Long id, LeaveDtos.ReviewRequest request) {
+        if (hr.getRole() != Role.HR) throw AppException.forbidden("仅 HR 可处理 HR 审核");
         LeaveRequest leaveRequest = findByIdAndTenant(id, hr.getTenantId());
+        if(leaveRequest.getEmployeeId().equals(hr.getId()))throw AppException.forbidden("不能审核本人申请");
         if (leaveRequest.getStatus() != RequestStatus.PENDING_HR) {
             throw AppException.badRequest("当前申请不在 HR 备案阶段");
         }
@@ -405,7 +389,7 @@ public class LeaveService {
             }
             leaveRequest.setDays(chargeDays);
             LeaveBalance balance = leaveBalanceRepository
-                    .findByTenantIdAndEmployeeIdAndLeaveType(
+                    .findForUpdateByTenantIdAndEmployeeIdAndLeaveType(
                             leaveRequest.getTenantId(),
                             leaveRequest.getEmployeeId(),
                             leaveRequest.getLeaveType()
@@ -475,7 +459,7 @@ public class LeaveService {
     }
 
     private LeaveRequest findByIdAndTenant(Long id, Long tenantId) {
-        LeaveRequest leaveRequest = leaveRequestRepository.findById(id)
+        LeaveRequest leaveRequest = leaveRequestRepository.lockForReview(id, tenantId)
                 .orElseThrow(() -> AppException.notFound("请假申请不存在"));
         if (!leaveRequest.getTenantId().equals(tenantId)) {
             throw AppException.notFound("请假申请不存在");

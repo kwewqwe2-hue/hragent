@@ -192,7 +192,18 @@ public class AdminDtos {
             @Size(max = 80) String region,
             LocalDate publishedAt,
             LocalDate updatedAt,
-            @Size(max = 40) String reviewStatus
+            @Size(max = 40) String reviewStatus,
+            @Size(max = 240) String jobGrades,
+            @Size(max = 240) String workTypes,
+            @Size(max = 500) String legalEntities,
+            @Size(max = 1000) String sourceUrl,
+            LocalDate effectiveFrom,
+            LocalDate effectiveTo
     ) {
+        public KnowledgeUpsertRequest(String category, String title, String content, String source,
+                String region, LocalDate publishedAt, LocalDate updatedAt, String reviewStatus) {
+            this(category, title, content, source, region, publishedAt, updatedAt, reviewStatus,
+                    null, null, null, null, null, null);
+        }
     }
 }

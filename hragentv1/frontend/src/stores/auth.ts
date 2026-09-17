@@ -97,6 +97,7 @@ export const useAuthStore = defineStore('auth', {
         this.token = ''
         this.user = null
         this.workspaces = []
+        localStorage.removeItem('hragent_ai_auth')
         localStorage.removeItem('hragent_token')
         localStorage.removeItem('hragent_user')
         localStorage.removeItem('hragent_workspaces')

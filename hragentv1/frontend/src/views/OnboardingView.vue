@@ -218,6 +218,10 @@ async function load() {
     if (!isHr.value && loaded.some((item) => item.status === 'APPROVED') && isNewHire.value) {
       await auth.refreshMe()
       await auth.refreshWorkspaces()
+      if (auth.user?.role === 'EMPLOYEE') {
+        ElMessage.success('入职资料已审核通过，已切换至员工工作台')
+        await router.replace('/dashboard')
+      }
     }
   } finally { loading.value = false }
 }

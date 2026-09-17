@@ -18,6 +18,7 @@ export interface UserProfile {
   department?: string
   title?: string
   managerId?: number
+  employeeStatus?: 'ONBOARDING' | 'ACTIVE' | 'INACTIVE' | 'LEFT'
 }
 
 export interface WorkspaceSummary {
@@ -48,6 +49,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'error'
   content: string
   createdAt: string
+  actions?: ChatAction[]
+  details?: string
   attachment?: {
     name: string
     size: number
@@ -55,6 +58,7 @@ export interface ChatMessage {
     image: boolean
   }
 }
+export interface ChatAction { label: string; type: 'message' | 'workbench' | 'requests' | 'panel' | 'medical-upload' | 'certificate-template'; value: string }
 
 export interface Conversation {
   id: string

@@ -13,5 +13,7 @@ public interface PolicyMonitorCandidateRepository extends JpaRepository<PolicyMo
             String contentHash
     );
 
+    List<PolicyMonitorCandidate> findBySourceNameOrderBySourceUrlAsc(String sourceName);
+
     List<PolicyMonitorCandidate> findByTenantIdOrderByDetectedAtDesc(Long tenantId);
 }

@@ -1,0 +1,50 @@
+services:
+  ocr:
+    # The small cloud instance cannot reliably build the full RapidOCR image.
+    # Keep the complete OCR service for local deployments; this compatibility
+    # endpoint lets n8n start for the core SaaS demo without image OCR.
+    image: n8nio/n8n:2.29.11
+    build: !reset null
+    entrypoint: ["tini", "--"]
+    command:
+      - node
+      - -e
+      - |
+        const http = require('http');
+        const reply = (res, status, body) => {
+          res.writeHead(status, {'content-type': 'application/json'});
+          res.end(JSON.stringify(body));
+        };
+        http.createServer((req, res) => {
+          if (req.url === '/health') return reply(res, 200, {status: 'ok'});
+          if (req.method === 'POST' && (req.url === '/ocr' || req.url === '/ocr-file')) {
+            return reply(res, 200, {success: false, text: '', message: '云端演示暂未启用图片 OCR'});
+          }
+          return reply(res, 404, {message: 'Not found'});
+        }).listen(8000, '0.0.0.0');
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  qdrant:
+    ports: !reset []
+
+  ollama:
+    ports: !reset []
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+
+  n8n:
+    ports: !override
+      - "127.0.0.1:5678:5678"
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""

@@ -1,4 +1,6 @@
-target
+# Keep the locally compiled artifact for the cloud runtime image.
+target/*
+!target/hragentv1-0.0.1-SNAPSHOT.jar
 .idea
 .vscode
 *.log

@@ -52,6 +52,14 @@ public class SecretCryptoService {
         }
     }
 
+    public String fingerprint(String value) {
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(key.getEncoded(), "HmacSHA256"));
+            return java.util.HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception ex) { throw new IllegalStateException("Unable to fingerprint value", ex); }
+    }
+
     public String decrypt(String encrypted) {
         if (encrypted == null || encrypted.isBlank()) {
             return "";

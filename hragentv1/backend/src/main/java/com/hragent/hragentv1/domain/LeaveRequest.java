@@ -8,6 +8,9 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "leave_requests")
 public class LeaveRequest {
+    private Long medicalRecordId;
+    public Long getMedicalRecordId() { return medicalRecordId; }
+    public void setMedicalRecordId(Long id) { medicalRecordId = id; }
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

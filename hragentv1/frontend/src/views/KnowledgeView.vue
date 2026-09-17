@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h1>知识库</h1>
-        <p>公司制度文档由 n8n RAG 统一索引，SaaS 保存文档元数据。</p>
+        <p>按主题汇集制度与政策，通过分类阅读或知识图谱查找依据。</p>
       </div>
       <div class="title-actions" v-if="isHr">
         <el-button :icon="Upload" @click="openUpload">导入文档</el-button>
@@ -11,7 +11,28 @@
       </div>
     </div>
 
-    <section v-if="isHr" class="policy-demo-bar">
+    <el-alert v-if="loadError" :title="loadError" type="error" :closable="false"><el-button @click="load">重新加载</el-button></el-alert>
+    <KnowledgeExplorer :articles="articles" :loading="loading" :is-hr="isHr" @edit="openEdit" @reindex="openReindex" @remove="remove" />
+    <PolicyUpdateBubble :is-hr="isHr" :public-count="articles.filter(a => policyDomain(a) === 'public').length" @updated="load" />
+
+    <details v-if="isHr" class="kb-admin-tools"><summary>政策更新与维护 <span v-if="pendingPolicyCount">· {{ pendingPolicyCount }} 条待审核</span></summary>
+    <section class="official-monitor">
+      <div class="policy-monitor-heading"><div><strong>官方政策定期检查</strong><p>{{ officialMonitor?.schedule || '正在读取检查计划' }} · {{ officialMonitor?.enabled ? '已启用（需后端持续运行）' : '未启用' }}</p></div>
+      <el-button type="primary" :loading="scanning || officialMonitor?.running" @click="scanOfficialPolicies">立即检查</el-button></div>
+      <el-alert v-if="officialError" :title="officialError" type="error" :closable="false" />
+      <p>{{ officialMonitor?.scope }}</p>
+      <div v-for="source in officialMonitor?.sources || []" :key="source.id" class="official-source">
+        <a :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.name }}</a>
+        <template v-if="sourceCheck(source.id)">
+          <p>最近检查：{{ formatDateTime(sourceCheck(source.id)!.checkedAt) }} · 已读取 {{ sourceCheck(source.id)!.documentsChecked }} 篇</p>
+          <p>最近完整成功：{{ sourceCheck(source.id)!.successfulAt ? formatDateTime(sourceCheck(source.id)!.successfulAt!) : '尚无成功记录' }}</p>
+          <el-alert v-if="sourceCheck(source.id)!.error" :title="sourceCheck(source.id)!.error!" type="warning" :closable="false" />
+        </template><p v-else>尚未检查，不能确认是否有更新。</p>
+      </div>
+      <p>发现新文件或正文变化后进入 HR 待审核列表；通过后进入正式知识库。附件、废止关系和适用范围需要核实，不能保证全网政策实时覆盖。</p>
+    </section>
+    <details><summary>演示来源（用于测试）</summary>
+    <section class="policy-demo-bar">
       <div class="policy-demo-info">
         <div class="policy-demo-title">
           <strong>政策网站监测演示源</strong>
@@ -43,6 +64,7 @@
       </div>
     </section>
 
+    </details>
     <section v-if="isHr" class="policy-monitor-results">
       <div class="policy-monitor-heading">
         <div>
@@ -52,7 +74,7 @@
               {{ pendingPolicyCount }} 条待审核
             </el-tag>
           </div>
-          <span>n8n 发现网站内容变化后，在这里生成候选记录；当前步骤不会自动写入知识库。</span>
+          <span>官方定期检查或已接入的监测流程发现变化后生成候选，HR 核验通过后更新知识库。</span>
         </div>
         <el-button size="small" :icon="Refresh" :loading="candidateLoading" @click="loadPolicyCandidates">
           刷新记录
@@ -109,6 +131,8 @@
       <el-empty v-else-if="!candidateLoading" :image-size="56" description="尚未发现政策更新" />
     </section>
 
+    </details>
+
     <el-dialog
       v-model="reviewVisible"
       title="审核政策更新候选"
@@ -136,6 +160,12 @@
         </div>
 
         <el-form :model="reviewForm" label-position="top" class="policy-review-form">
+          <template v-if="reviewCandidate.sourceId.startsWith('official-')">
+            <el-form-item label="核实原文件发布日期"><el-date-picker v-model="reviewForm.publishedAt" type="date" value-format="YYYY-MM-DD" /></el-form-item>
+            <el-form-item label="核实生效日期" required><el-date-picker v-model="reviewForm.effectiveAt" type="date" value-format="YYYY-MM-DD" /></el-form-item>
+            <el-form-item label="核实有效截止日期（无明确期限可留空）"><el-date-picker v-model="reviewForm.effectiveTo" type="date" value-format="YYYY-MM-DD" /></el-form-item>
+            <el-form-item label="核实适用地区" required><el-input v-model="reviewForm.region" placeholder="全国、上海或北京等" /></el-form-item>
+          </template>
           <el-form-item label="审核结果" required>
             <el-radio-group v-model="reviewForm.decision">
               <el-radio-button value="APPROVED">通过并写入知识库</el-radio-button>
@@ -154,7 +184,7 @@
           </el-form-item>
           <el-alert
             v-if="reviewForm.decision === 'APPROVED'"
-            title="通过后会立即同步到 n8n RAG，并在下方知识库生成正式文章。"
+            title="官方文件核验通过后写入知识库；到生效日期后才可作为现行政策检索。请确认附件和旧版废止关系。"
             type="info"
             :closable="false"
           />
@@ -172,26 +202,6 @@
       </template>
     </el-dialog>
 
-    <section class="content-panel">
-      <el-table :data="articles" stripe v-loading="loading">
-        <el-table-column prop="category" label="分类" width="130" />
-        <el-table-column prop="title" label="文档名称" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="region" label="适用范围" width="120" />
-        <el-table-column prop="source" label="来源" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="updatedAt" label="更新时间" width="130" />
-        <el-table-column prop="reviewStatus" label="状态" width="120" />
-        <el-table-column label="操作" width="300" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" :icon="View" @click="show(row)">查看</el-button>
-            <el-button v-if="isHr" size="small" :icon="Edit" @click="openEdit(row)">编辑</el-button>
-            <el-button v-if="isHr" size="small" :icon="Refresh" @click="openReindex(row)">重新索引</el-button>
-            <el-button v-if="isHr" size="small" type="danger" :icon="Delete" @click="remove(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="!loading && articles.length === 0" description="暂无知识库内容" />
-    </section>
-
     <el-dialog v-model="uploadVisible" :title="reindexArticleId ? '重新索引知识文档' : '导入制度文档到 n8n RAG'" width="560px" @closed="resetUpload">
       <el-form :model="uploadForm" label-position="top">
         <el-form-item label="文档文件" required>
@@ -207,7 +217,7 @@
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="分类" required>
-              <el-input v-model="uploadForm.category" placeholder="例如：假期制度" />
+              <el-select v-model="uploadForm.category" filterable allow-create placeholder="选择政策板块"><el-option v-for="topic in knowledgeTopics" :key="topic.id" :label="topic.name" :value="topic.name" /></el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -244,7 +254,7 @@
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="分类" required>
-              <el-input v-model="form.category" />
+              <el-select v-model="form.category" filterable allow-create placeholder="选择政策板块"><el-option label="企业福利确认" value="企业福利确认" /><el-option v-for="topic in knowledgeTopics" :key="topic.id" :label="topic.name" :value="topic.name" /></el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -253,6 +263,7 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-alert v-if="form.category === '企业福利确认'" title="企业年金确认：标题包含企业年金，正文单独一行填写“设立状态：已设立”或“设立状态：未设立”；请基于公司正式资料填写生效日期和适用合同主体，勿将未查到资料视为未设立。" type="info" :closable="false" />
         <el-form-item label="正文" required>
           <el-input v-model="form.content" type="textarea" :rows="8" />
         </el-form-item>
@@ -270,6 +281,10 @@
         </el-row>
         <el-row :gutter="12">
           <el-col :span="8">
+            <el-form-item label="生效日期"><el-date-picker v-model="form.effectiveFrom" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>
+            <el-form-item label="有效至（留空表示未标注）"><el-date-picker v-model="form.effectiveTo" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>
+            <el-form-item label="适用合同主体"><el-input v-model="form.legalEntities" placeholder="填写正式合同主体，留空为本企业通用" /></el-form-item>
+            <el-form-item label="原文链接"><el-input v-model="form.sourceUrl" /></el-form-item>
             <el-form-item label="发布日期">
               <el-date-picker v-model="form.publishedAt" value-format="YYYY-MM-DD" style="width: 100%" />
             </el-form-item>
@@ -296,7 +311,10 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { Delete, DocumentChecked, Edit, Link, Plus, Refresh, Upload, View } from '@element-plus/icons-vue'
+import { DocumentChecked, Link, Plus, Refresh, Upload, View } from '@element-plus/icons-vue'
+import PolicyUpdateBubble from '../components/PolicyUpdateBubble.vue'
+import KnowledgeExplorer from '../components/KnowledgeExplorer.vue'
+import { knowledgeTopics, policyDomain } from '../utils/knowledgeTopics'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteData, getData, postData, putData, uploadKnowledgeFile } from '../api/http'
 import type { DemoPolicy, KnowledgeArticle, PolicyMonitorCandidate, PolicyReviewStatus } from '../api/types'
@@ -308,6 +326,7 @@ const articles = ref<KnowledgeArticle[]>([])
 const demoPolicy = ref<DemoPolicy | null>(null)
 const policyCandidates = ref<PolicyMonitorCandidate[]>([])
 const loading = ref(false)
+const loadError = ref('')
 const policyBusy = ref(false)
 const candidateLoading = ref(false)
 const policyError = ref('')
@@ -325,6 +344,7 @@ const selectedFile = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 
 const form = reactive({
+  effectiveFrom: '', effectiveTo: '', legalEntities: '', sourceUrl: '',
   category: '',
   title: '',
   content: '',
@@ -344,10 +364,34 @@ const uploadForm = reactive({
 const reviewForm = reactive<{
   decision: 'APPROVED' | 'REJECTED'
   opinion: string
+  publishedAt: string
+  effectiveAt: string
+  effectiveTo: string
+  region: string
 }>({
   decision: 'APPROVED',
-  opinion: ''
+  opinion: '',
+  publishedAt: '',
+  effectiveAt: '',
+  effectiveTo: '',
+  region: ''
 })
+
+type OfficialCheck = { id: string; checkedAt: string; successfulAt?: string; documentsChecked: number; error?: string }
+const officialMonitor = ref<{ enabled: boolean; running: boolean; schedule: string; scope: string; sources: {id: string; name: string; url: string}[]; checks: OfficialCheck[] }>()
+const officialError = ref('')
+const scanning = ref(false)
+const sourceCheck = (id: string) => officialMonitor.value?.checks.find(item => item.id === id)
+async function loadOfficialMonitor() {
+  try { officialMonitor.value = await getData('/admin/policy-monitor/sources'); officialError.value = '' }
+  catch { officialError.value = '无法读取政策检查状态，请稍后刷新。' }
+}
+async function scanOfficialPolicies() {
+  scanning.value = true
+  try { await postData('/admin/policy-monitor/scan', {}); await loadOfficialMonitor(); ElMessage.success('检查已启动，完成后刷新待审核记录。') }
+  catch { officialError.value = '启动检查失败，请重试。' }
+  finally { scanning.value = false }
+}
 
 let policyRefreshTimer: number | undefined
 
@@ -357,8 +401,11 @@ const pendingPolicyCount = computed(() =>
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     articles.value = await getData('/admin/knowledge')
+  } catch {
+    loadError.value = '知识库加载失败，请重新加载。'
   } finally {
     loading.value = false
   }
@@ -382,7 +429,7 @@ async function loadPolicyCandidates() {
 
 async function refreshPolicyMonitor() {
   if (!isHr.value) return
-  await Promise.all([loadDemoPolicy(), loadPolicyCandidates()])
+  await Promise.allSettled([loadDemoPolicy(), loadPolicyCandidates(), loadOfficialMonitor()])
 }
 
 function policyStatusLabel(status: PolicyReviewStatus) {
@@ -415,6 +462,10 @@ function openCandidateSource(candidate: PolicyMonitorCandidate) {
 
 function openPolicyReview(candidate: PolicyMonitorCandidate) {
   reviewCandidate.value = candidate
+  reviewForm.publishedAt = candidate.publishedAt || ''
+  reviewForm.effectiveTo = ''
+  reviewForm.effectiveAt = candidate.effectiveAt || ''
+  reviewForm.region = candidate.region || ''
   reviewForm.decision = 'APPROVED'
   reviewForm.opinion = ''
   reviewVisible.value = true
@@ -436,7 +487,11 @@ async function submitPolicyReview() {
   try {
     await postData(`/admin/policy-monitor/candidates/${reviewCandidate.value.id}/review`, {
       decision: reviewForm.decision,
-      opinion: reviewForm.opinion.trim() || undefined
+      opinion: reviewForm.opinion.trim() || undefined,
+      publishedAt: reviewForm.publishedAt || undefined,
+      effectiveTo: reviewForm.effectiveTo || undefined,
+      effectiveAt: reviewForm.effectiveAt || undefined,
+      region: reviewForm.region || undefined
     })
     ElMessage.success(reviewForm.decision === 'APPROVED' ? '政策已通过审核并写入知识库' : '政策候选已驳回')
     reviewVisible.value = false
@@ -574,7 +629,8 @@ async function upload() {
 function openCreate() {
   editingId.value = null
   Object.assign(form, {
-    category: '公司制度',
+      effectiveFrom: '', effectiveTo: '', legalEntities: '', sourceUrl: '',
+      category: '公司制度',
     title: '',
     content: '',
     source: 'HR 手动维护',
@@ -588,7 +644,7 @@ function openCreate() {
 
 function openEdit(row: KnowledgeArticle) {
   editingId.value = row.id
-  Object.assign(form, row)
+  Object.assign(form, { effectiveFrom: '', effectiveTo: '', legalEntities: '', sourceUrl: '' }, row)
   editVisible.value = true
 }
 
@@ -632,6 +688,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.official-monitor{margin-bottom:24px}.official-monitor p{color:#63758a;font-size:14px;line-height:1.6}.official-source{border:1px solid #d8e1de;border-radius:8px;padding:12px;margin:12px 0}.official-source a{color:#2878cf}
+.kb-admin-tools{margin-top:28px;padding:18px;border:1px solid #d8e1de;border-radius:12px}.kb-admin-tools>summary{cursor:pointer;font-weight:600;color:#527365}.kb-admin-tools[open]>summary{margin-bottom:18px}
 .title-actions {
   display: flex;
   gap: 10px;

@@ -1,4 +1,11 @@
 :root {
+  --el-color-primary: #237c61;
+  --el-color-primary-light-3: #65a48f;
+  --el-color-primary-light-5: #91beb0;
+  --el-color-primary-light-7: #bdd8d0;
+  --el-color-primary-light-8: #d3e5df;
+  --el-color-primary-light-9: #e9f2ef;
+  --el-color-primary-dark-2: #1c634e;
   font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
   color: #172033;
   background: #eef2f7;

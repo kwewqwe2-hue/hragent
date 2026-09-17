@@ -85,6 +85,11 @@ public class GlobalExceptionHandler {
                 RequestCorrelation.currentId(), request.getMethod(), request.getRequestURI());
     }
 
+    @ExceptionHandler({org.springframework.orm.ObjectOptimisticLockingFailureException.class, org.springframework.dao.DataIntegrityViolationException.class})
+    public ResponseEntity<ApiResponse<Void>> handleConcurrentUpdate(Exception exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.fail("记录已更新或正在处理，请刷新后重试，避免重复提交。"));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(
             Exception exception,

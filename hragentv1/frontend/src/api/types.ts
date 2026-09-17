@@ -2,7 +2,7 @@ export type Role = 'NEW_HIRE' | 'EMPLOYEE' | 'MANAGER' | 'HR'
 export type MembershipStatus = 'PENDING' | 'PENDING_PROFILE' | 'ACTIVE' | 'REJECTED' | 'LEFT' | 'DISABLED'
 export type LeaveType = 'ANNUAL' | 'SICK' | 'PERSONAL' | 'MARRIAGE'
 export type RequestStatus = 'PENDING_MANAGER' | 'PENDING_HR' | 'APPROVED' | 'REJECTED'
-export type EmploymentCertificateType = 'STANDARD' | 'VISA'
+export type EmploymentCertificateType = 'STANDARD' | 'INCOME' | 'VISA'
 export type CertificateLanguage = 'CHINESE' | 'ENGLISH' | 'BILINGUAL'
 export type CertificateTemplateReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
 export type CertificateRequestStatus =
@@ -33,6 +33,7 @@ export interface UserProfile {
   department?: string
   title?: string
   managerId?: number
+  employeeStatus?: 'ONBOARDING' | 'ACTIVE' | 'INACTIVE' | 'LEFT'
 }
 
 export interface WorkspaceSummary {
@@ -142,6 +143,7 @@ export interface LeaveCalendar {
 }
 
 export interface LeaveRequest {
+  medicalRecordId?: number | null
   id: number
   employeeName: string
   managerName: string
@@ -163,7 +165,27 @@ export interface LeaveRequest {
   hrRecordedAt?: string
 }
 
+export interface LeavePreview {
+  canSubmit: boolean
+  message: string
+  leaveType: LeaveType
+  leaveTypeLabel: string
+  startDate: string
+  endDate: string
+  workingDays: number
+  availableDaysBefore: number
+  availableDaysAfter: number
+  managerEmployeeNo: string
+  managerName: string
+}
+
 export interface KnowledgeArticle {
+  jobGrades?: string
+  workTypes?: string
+  legalEntities?: string
+  sourceUrl?: string
+  effectiveFrom?: string
+  effectiveTo?: string
   id: number
   category: string
   title: string
@@ -322,6 +344,7 @@ export interface EmploymentCertificateOptions {
 }
 
 export interface EmploymentCertificateTemplate {
+  templateSource: 'COMPANY' | 'PERSONAL'
   id: number
   name: string
   destinationCountry: string

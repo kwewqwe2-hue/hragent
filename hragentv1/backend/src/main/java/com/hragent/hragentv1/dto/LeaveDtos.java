@@ -50,8 +50,10 @@ public class LeaveDtos {
             @NotNull LocalDate startDate,
             @NotNull LocalDate endDate,
             @NotNull @DecimalMin("0.5") BigDecimal days,
-            @NotBlank @Size(max = 600) String reason
+            @NotBlank @Size(max = 600) String reason,
+            Long medicalRecordId
     ) {
+        public CreateLeaveRequest(LeaveType type, LocalDate start, LocalDate end, BigDecimal days, String reason) { this(type,start,end,days,reason,null); }
     }
 
     public record ReviewRequest(
@@ -79,7 +81,8 @@ public class LeaveDtos {
             String hrOpinion,
             LocalDateTime submittedAt,
             LocalDateTime managerReviewedAt,
-            LocalDateTime hrRecordedAt
+            LocalDateTime hrRecordedAt,
+            Long medicalRecordId
     ) {
         public static LeaveRequestView from(LeaveRequest request, String employeeName, String managerName) {
             return new LeaveRequestView(
@@ -101,7 +104,8 @@ public class LeaveDtos {
                     request.getHrOpinion(),
                     request.getSubmittedAt(),
                     request.getManagerReviewedAt(),
-                    request.getHrRecordedAt()
+                    request.getHrRecordedAt(),
+                    request.getMedicalRecordId()
             );
         }
     }

@@ -3,6 +3,7 @@ package com.hragent.hragentv1.web;
 import com.hragent.hragentv1.domain.Role;
 import com.hragent.hragentv1.domain.UserAccount;
 import com.hragent.hragentv1.dto.ApiResponse;
+import com.hragent.hragentv1.dto.AgentIntegrationDtos;
 import com.hragent.hragentv1.dto.LeaveDtos;
 import com.hragent.hragentv1.service.AuthService;
 import com.hragent.hragentv1.service.LeaveService;
@@ -51,6 +52,15 @@ public class LeaveController {
     ) {
         UserAccount user = authService.requireUser(servletRequest);
         return ApiResponse.ok("提交成功，等待主管审批", leaveService.create(user, request));
+    }
+
+    @PostMapping("/preview")
+    public ApiResponse<AgentIntegrationDtos.LeavePreview> preview(
+            HttpServletRequest servletRequest,
+            @Valid @RequestBody LeaveDtos.CreateLeaveRequest request
+    ) {
+        UserAccount user = authService.requireUser(servletRequest);
+        return ApiResponse.ok(leaveService.previewForAgent(user, request));
     }
 
     @GetMapping("/my")

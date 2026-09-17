@@ -19,7 +19,8 @@ public record UserProfile(
         Role role,
         String department,
         String title,
-        Long managerId
+        Long managerId,
+        EmployeeStatus employeeStatus
 ) {
     public static UserProfile from(
             PlatformAccount account,
@@ -44,7 +45,8 @@ public record UserProfile(
                 membership == null ? null : membership.getRole(),
                 employee == null ? null : employee.getDepartment(),
                 employee == null ? null : employee.getTitle(),
-                employee == null ? null : employee.getManagerId()
+                employee == null ? null : employee.getManagerId(),
+                employee == null ? null : employee.getEmployeeStatus()
         );
     }
 }

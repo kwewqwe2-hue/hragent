@@ -35,7 +35,7 @@ public class EmploymentCertificateTemplateService {
     private static final long MAX_TEMPLATE_BYTES = 5L * 1024 * 1024;
     private static final String DOCX_CONTENT_TYPE =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\{\\{([A-Za-z][A-Za-z0-9]*)}}");
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\{\\{([^{}\\r\\n]{1,60})}}");
     private static final Set<String> SUPPORTED_PLACEHOLDERS = Set.of(
             "legalName",
             "englishName",
@@ -73,7 +73,7 @@ public class EmploymentCertificateTemplateService {
         return templateRepository.findByTenantIdOrderByUpdatedAtDesc(actor.getTenantId()).stream()
                 .filter(template -> actor.getRole() == Role.HR
                         || template.getUploadedByEmployeeId().equals(actor.getId())
-                        || (template.isActive()
+                        || ("COMPANY".equals(template.getTemplateSource()) && template.isActive()
                         && effectiveReviewStatus(template) == CertificateTemplateReviewStatus.APPROVED))
                 .map(this::view)
                 .toList();
@@ -147,8 +147,8 @@ public class EmploymentCertificateTemplateService {
             String auditDetailPrefix
     ) {
         String validatedName = required(name, "模板名称", 120);
-        String validatedCountry = required(destinationCountry, "目的国家或地区", 100);
-        String validatedConsulate = required(consulateName, "领事馆或受理机构", 160);
+        String validatedCountry = required(destinationCountry == null || destinationCountry.isBlank() ? "通用" : destinationCountry, "目的国家或地区", 100);
+        String validatedConsulate = required(consulateName == null || consulateName.isBlank() ? "通用" : consulateName, "领事馆或受理机构", 160);
         if (language == null) {
             throw AppException.badRequest("请选择模板语言");
         }
@@ -157,6 +157,7 @@ public class EmploymentCertificateTemplateService {
         try {
             EmploymentCertificateTemplate template = new EmploymentCertificateTemplate();
             template.setTenantId(actor.getTenantId());
+            template.setTemplateSource(reviewStatus == CertificateTemplateReviewStatus.PENDING ? "PERSONAL" : "COMPANY");
             template.setName(validatedName);
             template.setDestinationCountry(validatedCountry);
             template.setConsulateName(validatedConsulate);
@@ -216,7 +217,7 @@ public class EmploymentCertificateTemplateService {
     @Transactional
     public TemplateDownload download(UserAccount actor, Long templateId) {
         EmploymentCertificateTemplate template = requireTemplate(actor, templateId);
-        boolean companyTemplate = template.isActive()
+        boolean companyTemplate = "COMPANY".equals(template.getTemplateSource()) && template.isActive()
                 && effectiveReviewStatus(template) == CertificateTemplateReviewStatus.APPROVED;
         if (actor.getRole() != Role.HR
                 && !template.getUploadedByEmployeeId().equals(actor.getId())
@@ -252,9 +253,11 @@ public class EmploymentCertificateTemplateService {
     ) {
         requireHr(actor);
         EmploymentCertificateTemplate template = requireTemplate(actor, templateId);
+        if ("COMPANY".equals(template.getTemplateSource()) && template.isActive() && effectiveReviewStatus(template) == CertificateTemplateReviewStatus.APPROVED) return template;
         if (!template.getUploadedByEmployeeId().equals(applicantEmployeeId)) {
             throw AppException.badRequest("申请人与模板提交人不一致");
         }
+        if (effectiveReviewStatus(template) == CertificateTemplateReviewStatus.APPROVED && template.isActive()) return template;
         if (effectiveReviewStatus(template) != CertificateTemplateReviewStatus.PENDING) {
             throw AppException.badRequest("该员工模板已经处理，请刷新列表");
         }
@@ -280,6 +283,7 @@ public class EmploymentCertificateTemplateService {
     @Transactional
     public void cancelProposal(UserAccount actor, Long templateId) {
         EmploymentCertificateTemplate template = requireTemplate(actor, templateId);
+        if ("COMPANY".equals(template.getTemplateSource())) return;
         if (!template.getUploadedByEmployeeId().equals(actor.getId())) {
             throw AppException.forbidden("只能取消自己提交的模板");
         }
@@ -326,6 +330,14 @@ public class EmploymentCertificateTemplateService {
         }
     }
 
+    private void normalizeFile(Path path) throws IOException {
+        byte[] bytes = Files.readAllBytes(path);
+        try (var doc = new XWPFDocument(new java.io.ByteArrayInputStream(bytes))) {
+            CertificateTemplateFields.normalize(doc);
+            try (var out = Files.newOutputStream(path)) { doc.write(out); }
+        }
+    }
+
     private void validateDocx(Path path) {
         try (InputStream input = Files.newInputStream(path); XWPFDocument ignored = new XWPFDocument(input)) {
             // Opening through Apache POI verifies that this is a readable DOCX package.
@@ -336,8 +348,9 @@ public class EmploymentCertificateTemplateService {
 
     private void validateTemplatePlaceholders(Path path) {
         try (InputStream input = Files.newInputStream(path); XWPFDocument document = new XWPFDocument(input)) {
+            CertificateTemplateFields.normalize(document);
             TemplateAnalysis analysis = analyzeDocument(document);
-            if (!analysis.placeholders().isEmpty() && analysis.unsupportedPlaceholders().isEmpty()) {
+            if (!analysis.placeholders().isEmpty()) {
                 return;
             }
             if (analysis.placeholders().isEmpty()) {
@@ -371,7 +384,7 @@ public class EmploymentCertificateTemplateService {
                 warnings.add("没有识别到可替换字段，上传后无法自动生成员工证明");
             }
             if (!analysis.unsupportedPlaceholders().isEmpty()) {
-                warnings.add("存在不支持的字段，上传会被阻止");
+                warnings.add("请补充自定义字段后提交，HR 将一并核对。");
             }
             if (analysis.placeholders().contains("{{monthlySalary}}")
                     || analysis.placeholders().contains("{{currency}}")) {
@@ -382,7 +395,7 @@ public class EmploymentCertificateTemplateService {
                     file.getSize(),
                     true,
                     !analysis.placeholders().isEmpty(),
-                    !analysis.placeholders().isEmpty() && analysis.unsupportedPlaceholders().isEmpty(),
+                    !analysis.placeholders().isEmpty(),
                     analysis.placeholders(),
                     analysis.unsupportedPlaceholders(),
                     warnings
@@ -395,13 +408,13 @@ public class EmploymentCertificateTemplateService {
     }
 
     private TemplateAnalysis analyzeDocument(XWPFDocument document) {
+        CertificateTemplateFields.normalize(document);
         LinkedHashSet<String> placeholders = new LinkedHashSet<>();
         collectPlaceholders(document.getBodyElements(), placeholders);
         document.getHeaderList().forEach(header -> collectPlaceholders(header.getBodyElements(), placeholders));
         document.getFooterList().forEach(footer -> collectPlaceholders(footer.getBodyElements(), placeholders));
 
         List<String> supported = placeholders.stream()
-                .filter(SUPPORTED_PLACEHOLDERS::contains)
                 .map(value -> "{{" + value + "}}")
                 .toList();
         List<String> unsupported = placeholders.stream()
@@ -434,6 +447,24 @@ public class EmploymentCertificateTemplateService {
                 .reduce("", String::concat);
     }
 
+    @Transactional(readOnly = true)
+    public java.util.Optional<EmploymentCertificateTemplate> companyDefault(UserAccount actor, CertificateLanguage language, String country, String consulate) {
+        String c=country==null||country.isBlank()?"通用":country, office=consulate==null||consulate.isBlank()?"通用":consulate;
+        return templateRepository.findByTenantIdOrderByUpdatedAtDesc(actor.getTenantId()).stream()
+          .filter(t->"COMPANY".equals(t.getTemplateSource())&&t.isActive()&&effectiveReviewStatus(t)==CertificateTemplateReviewStatus.APPROVED&&t.getLanguage()==language)
+          .filter(t->c.equalsIgnoreCase(t.getDestinationCountry())&&office.equalsIgnoreCase(t.getConsulateName())).findFirst();
+    }
+    public EmploymentCertificateTemplateDtos.TemplatePreview inspect(UserAccount actor,Long id) {
+        var download=download(actor,id);
+        return preview(actor,new CertificateMemoryFile(download.fileName(),download.contentType(),download.content()));
+    }
+    @Transactional
+    public void prepareProposal(UserAccount actor,Long id,CertificateLanguage language,String country,String consulate) {
+        var t=requireTemplate(actor,id);
+        if("PERSONAL".equals(t.getTemplateSource())&&t.getUploadedByEmployeeId().equals(actor.getId())&&effectiveReviewStatus(t)==CertificateTemplateReviewStatus.PENDING){
+            t.setLanguage(language);t.setDestinationCountry(country==null||country.isBlank()?"通用":country);t.setConsulateName(consulate==null||consulate.isBlank()?"通用":consulate);templateRepository.save(t);
+        }
+    }
     private EmploymentCertificateTemplate requireTemplate(UserAccount actor, Long templateId) {
         return templateRepository.findByIdAndTenantId(templateId, actor.getTenantId())
                 .orElseThrow(() -> AppException.notFound("签证在职证明模板不存在"));
@@ -457,7 +488,8 @@ public class EmploymentCertificateTemplateService {
                 template.getReviewOpinion(),
                 template.getReviewedAt(),
                 template.getCreatedAt(),
-                template.getUpdatedAt()
+                template.getUpdatedAt(),
+                template.getTemplateSource()
         );
     }
 

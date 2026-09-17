@@ -1,0 +1,698 @@
+{
+  "updatedAt": "2026-07-30T04:21:56.316Z",
+  "createdAt": "2026-07-21T06:51:29.700Z",
+  "id": "3RiI6nH28eRUuOaz",
+  "name": "HRAgent-03-钉钉文件解析",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "downloadCode"
+            },
+            {
+              "name": "robotCode"
+            },
+            {
+              "name": "fileName"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3f5a7bd7-c8b4-4b30-a189-4560565eb04c",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dingtalk.com/v1.0/oauth2/accessToken",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { appKey: $env.DINGTALK_APP_KEY, appSecret: $env.DINGTALK_APP_SECRET } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "0096cfc5-2277-4827-a116-ab8bf3d2abf5",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dingtalk.com/v1.0/robot/messageFiles/download",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-acs-dingtalk-access-token",
+              "value": "={{ $json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { downloadCode: $('When Executed by Another Workflow').item.json.downloadCode, robotCode: $('When Executed by Another Workflow').item.json.robotCode } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "9bdf3fcd-a462-403a-b89e-c9bc025865ca",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.downloadUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        624,
+        0
+      ],
+      "id": "a92cd180-3ca0-4e7e-ba49-2f1f8ae98807",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ String($json.fileName || '').toLowerCase() }}",
+                    "rightValue": ".pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "endsWith"
+                    },
+                    "id": "34f63ad9-a957-409d-879e-bd19a3a488c1"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "1323f529-cc7a-4d77-9def-e0d3e53eb44d",
+                    "leftValue": "={{ String($json.fileName || '').toLowerCase() }}",
+                    "rightValue": ".txt",
+                    "operator": {
+                      "type": "string",
+                      "operation": "endsWith"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "a195d492-d72f-4ab4-b7ee-377771a8ba76",
+                    "leftValue": "={{ String($json.fileName || '').toLowerCase() }}",
+                    "rightValue": ".docx",
+                    "operator": {
+                      "type": "string",
+                      "operation": "endsWith"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "ocr-image-extension-1",
+                    "leftValue": "={{ String($json.fileName || '').toLowerCase() }}",
+                    "rightValue": ".jpg",
+                    "operator": {
+                      "type": "string",
+                      "operation": "endsWith"
+                    }
+                  },
+                  {
+                    "id": "ocr-image-extension-2",
+                    "leftValue": "={{ String($json.fileName || '').toLowerCase() }}",
+                    "rightValue": ".jpeg",
+                    "operator": {
+                      "type": "string",
+                      "operation": "endsWith"
+                    }
+                  },
+                  {
+                    "id": "ocr-image-extension-3",
+                    "leftValue": "={{ String($json.fileName || '').toLowerCase() }}",
+                    "rightValue": ".png",
+                    "operator": {
+                      "type": "string",
+                      "operation": "endsWith"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "6800fae8-7bdf-48a5-a9d3-b620b8e7e1ec",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        1248,
+        -112
+      ],
+      "id": "a7197e26-d1c2-4692-b1f6-6aa595a8320e",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "cd4cbcfd-cce8-4f85-9864-6d660052c67b",
+      "name": "Extract from File1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        1456,
+        112
+      ],
+      "id": "c4eef1eb-03d3-4179-87d6-19131670d90e",
+      "name": "Compression"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfor (const item of items) {\n  const entries = Object.entries(item.binary ?? {});\n  const match = entries.find(([, file]) => {\n    const fullName = [file.directory, file.fileName]\n      .filter(Boolean)\n      .join('/')\n      .replace(/\\\\/g, '/')\n      .toLowerCase();\n\n    return fullName.endsWith('word/document.xml');\n  });\n\n  if (!match) {\n    throw new Error('无法在 DOCX 中找到 word/document.xml，请确认文件未损坏且不是旧版 .doc 文件');\n  }\n\n  item.binary = { data: match[1] };\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        112
+      ],
+      "id": "b39e302a-c55a-45b7-9874-a50db20ac00e",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "xml",
+        "destinationKey": "xml",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        1872,
+        112
+      ],
+      "id": "4e7213a7-74ed-474e-8a34-2bed61495953",
+      "name": "Extract from File2"
+    },
+    {
+      "parameters": {
+        "jsCode": "function decodeXml(value) {\n  return value\n    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))\n    .replace(/&#([0-9]+);/g, (_, decimal) => String.fromCodePoint(Number.parseInt(decimal, 10)))\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"')\n    .replace(/&apos;/g, \"'\")\n    .replace(/&amp;/g, '&');\n}\n\nconst source = $('Switch').first().json;\nconst fileName = String(source.fileName || 'upload.bin');\nconst maxChars = 60000;\n\nreturn $input.all().map((item) => {\n  const xml = String(item.json.xml || '');\n  const parts = Array.from(xml.matchAll(/<w:t(?:\\s[^>]*)?>([\\s\\S]*?)<\\/w:t>/g))\n    .map((match) => decodeXml(match[1]));\n  const rawText = parts.join(' ').replace(/\\s+/g, ' ').trim();\n\n  if (!rawText) {\n    throw new Error('DOCX 中没有提取到可读文字；图片型或损坏文件暂不支持');\n  }\n\n  return {\n    json: {\n      fileName,\n      fileType: 'docx',\n      extractedText: rawText.slice(0, maxChars),\n      truncated: rawText.length > maxChars,\n      originalLength: rawText.length,\n    },\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        112
+      ],
+      "id": "cb9e15fd-1595-4beb-8e91-c6c2a42d7f92",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Switch').first().json;\nconst fileName = String(source.fileName || 'upload.bin');\nconst maxChars = 60000;\n\nreturn $input.all().map((item) => {\n  const rawText = String(item.json.text ?? '').trim();\n\n  if (!rawText) {\n    throw new Error('PDF 中没有提取到可读文字；扫描件、图片型或加密 PDF 暂不支持');\n  }\n\n  return {\n    json: {\n      fileName,\n      fileType: 'pdf',\n      extractedText: rawText.slice(0, maxChars),\n      truncated: rawText.length > maxChars,\n      originalLength: rawText.length,\n    },\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        -112
+      ],
+      "id": "d6c0bb9a-5959-47d4-b34e-fe6cfa3db03c",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Switch').first().json;\nconst fileName = String(source.fileName || 'upload.bin');\nconst maxChars = 60000;\n\nreturn $input.all().map((item) => {\n  const rawText = String(item.json.text ?? '').trim();\n\n  if (!rawText) {\n    throw new Error('TXT 文件为空或无法按文本编码读取');\n  }\n\n  return {\n    json: {\n      fileName,\n      fileType: 'txt',\n      extractedText: rawText.slice(0, maxChars),\n      truncated: rawText.length > maxChars,\n      originalLength: rawText.length,\n    },\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        0
+      ],
+      "id": "f49db0ab-9389-4b12-9463-85fc6cb0c128",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Switch').first().json;\nconst fileName = String(source.fileName || 'upload.bin');\n\nreturn [{\n  json: {\n    fileName,\n    fileType: 'unsupported',\n    error: '暂仅支持 JPG、JPEG、PNG、PDF、TXT 和 DOCX 文件；不支持旧版 DOC。扫描或图片型 PDF 请先转成图片上传。',\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        352
+      ],
+      "id": "75d7c434-c302-4b57-8894-b54116a33fde",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ocr:8000/ocr-file",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1248,
+        224
+      ],
+      "id": "5ea91fe2-a523-47b8-879a-634f6f79d4e1",
+      "name": "OCR Image"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Switch').first().json;\nconst fileName = String(source.fileName || 'upload.bin');\nconst rawText = String($json.text ?? '').trim();\nconst maxChars = 60000;\n\nif (!$json.success) {\n  throw new Error('图片 OCR 处理失败，请稍后重试');\n}\n\nif (!rawText) {\n  throw new Error('图片中没有识别到可读文字，请上传更清晰的 JPG、JPEG 或 PNG 图片');\n}\n\nreturn [{\n  json: {\n    fileName,\n    fileType: fileName.toLowerCase().endsWith('.png') ? 'png' : 'jpg',\n    extractedText: rawText.slice(0, maxChars),\n    truncated: rawText.length > maxChars,\n    originalLength: rawText.length,\n    ocrLineCount: Number($json.lineCount || 0),\n    ocrAverageConfidence: $json.averageConfidence ?? null,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        224
+      ],
+      "id": "8251585a-6457-4ba8-a223-0fd474fd85b1",
+      "name": "Format OCR Result"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hragent-web-attachment-parse",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        -320
+      ],
+      "id": "ac810adb-9597-4215-be14-a27076b84689",
+      "name": "Web Attachment Upload",
+      "webhookId": "786e83f1-463f-4493-8d87-d3a1e94ee212"
+    },
+    {
+      "parameters": {
+        "jsCode": "const expected = String($env.WEB_ATTACHMENT_INTERNAL_KEY || '');\nconst supplied = String($json.headers?.['x-hragent-internal-key'] || '');\n\nif (!expected || supplied !== expected) {\n  throw new Error('网页附件解析请求未通过内部鉴权');\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -320
+      ],
+      "id": "1f73a94f-964e-4e8e-b619-35b88927324b",
+      "name": "Authorize Web Attachment",
+      "onError": "stopWorkflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst binary = item.binary?.data;\n\nif (!binary) {\n  throw new Error('网页附件请求没有包含 data 文件字段');\n}\n\nconst fileName = String(binary.fileName || item.json.body?.fileName || 'upload.bin')\n  .replaceAll('/', '_')\n  .split(String.fromCharCode(92)).join('_')\n  .replaceAll('..', '_');\n\nif (!fileName || fileName === 'upload.bin') {\n  throw new Error('网页附件缺少有效文件名');\n}\n\nitem.json = {\n  ...item.json,\n  source: 'web',\n  fileName,\n};\nitem.binary = { data: binary };\nreturn [item];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -320
+      ],
+      "id": "549fe713-acd9-4bc6-8c3c-44cf3da6b37b",
+      "name": "Normalize Web Attachment"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst binary = item.binary?.data;\n\nif (!binary) {\n  throw new Error('钉钉附件下载结果没有包含文件内容');\n}\n\nconst fileName = String($('When Executed by Another Workflow').first().json.fileName || binary.fileName || 'dingtalk-file.bin')\n  .replaceAll('/', '_')\n  .split(String.fromCharCode(92)).join('_')\n  .replaceAll('..', '_');\n\nitem.json = { source: 'dingtalk', fileName };\nitem.binary = { data: binary };\nreturn [item];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "9f985b54-f59f-44c4-b24f-6eeca077b782",
+      "name": "Normalize DingTalk Attachment"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst binary = item.binary?.data;\n\nif (!binary) {\n  throw new Error('DOCX 文件内容为空');\n}\n\nconst originalName = String(item.json.fileName || binary.fileName || 'upload.docx');\nbinary.fileName = originalName.replace(/\\.docx$/i, '') + '.zip';\nbinary.fileExtension = 'zip';\nbinary.mimeType = 'application/zip';\nitem.binary = { data: binary };\nreturn [item];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        112
+      ],
+      "id": "099545c8-5758-47c5-8f4a-e6e29bd430fc",
+      "name": "Prepare DOCX Archive"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Normalize DingTalk Attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from File1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare DOCX Archive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OCR Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compression": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Extract from File2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OCR Image": {
+      "main": [
+        [
+          {
+            "node": "Format OCR Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web Attachment Upload": {
+      "main": [
+        [
+          {
+            "node": "Authorize Web Attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize Web Attachment": {
+      "main": [
+        [
+          {
+            "node": "Normalize Web Attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Web Attachment": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize DingTalk Attachment": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare DOCX Archive": {
+      "main": [
+        [
+          {
+            "node": "Compression",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "errorWorkflow": "e8f1a4c2-7b90-4d35-9c61-2a5e8f0b3d17"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "f22f13fd6ced2133a6235977f8a116a738efe75389381d070dac7e8ce27dea39"
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "26475876-64e2-46c1-b318-c59768eba040",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-07-21T06:51:29.700Z",
+      "createdAt": "2026-07-21T06:51:29.700Z",
+      "role": "workflow:owner",
+      "workflowId": "3RiI6nH28eRUuOaz",
+      "projectId": "mdZFyQXmS7UPBVz9",
+      "project": {
+        "updatedAt": "2026-07-21T06:45:01.637Z",
+        "createdAt": "2026-07-21T06:31:57.208Z",
+        "id": "mdZFyQXmS7UPBVz9",
+        "name": "123 123 <1280674031@qq.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "10e8321a-a948-4232-95b2-f8f62cf5fe2f"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

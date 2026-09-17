@@ -258,7 +258,66 @@ public class DataInitializer {
                                 "HR FAQ", "Default", "APPROVED")
                 ));
             }
+            seedPolicyKnowledge(knowledgeArticleRepository, tenant.getId());
         };
+    }
+
+    private void seedPolicyKnowledge(KnowledgeArticleRepository repository, Long tenantId) {
+        ensureKnowledge(repository, tenantId, "HR 助手政策与自助服务范围", "服务目录",
+                "我可以协助解答和办理以下高频事项：\n"
+                        + "1. 休假与假期：年假、病假、产假/生育假、婚假、事假，以及个人可用余额。\n"
+                        + "2. 考勤与加班：工时、休息日、加班补偿的国家基线；具体排班、调休和审批规则以公司及工作地制度为准。\n"
+                        + "3. 差旅、费用和福利：可核对已维护的差旅标准、报销范围和福利制度；未维护公司制度时会明确提示补充，而不会编造额度。\n"
+                        + "4. 证明与自助流转：在职证明、签证/出境证明申请及下载进度；含薪资信息需按用途申请并经 HR 审核。\n"
+                        + "5. 社保、公积金与落户：可提供异地转移接续的通用流程和材料清单；经办渠道、金额和落户条件由参保地/迁入地规定。\n"
+                        + "6. 关键事件：可解答转正、合同续签、体检和年假失效的规则与办理路径。自动提醒和代办须由 HR 在工作台配置后才会实际触发。\n\n"
+                        + "回答会标注国家法规或公司制度来源；涉及地区、法人主体、职级、工种或个人余额时，会结合已维护信息核对。",
+                "HR 助手服务目录（2026-09-07）", "全国", LocalDate.of(2026, 9, 7));
+
+        ensureKnowledge(repository, tenantId, "工时、考勤与加班补偿（国家基线）", "国家法规",
+                "标准工时制下，劳动者每日工作不超过 8 小时、平均每周不超过 40 小时；用人单位应保证劳动者每周至少休息 1 日。延长工作时间通常每日不超过 1 小时，特殊原因每日不超过 3 小时、每月不超过 36 小时。\n"
+                        + "加班工资基线：工作日延长工时不低于工资的 150%；休息日不能安排补休的不低于 200%；法定休假日不低于 300%。具体考勤口径、加班申请、调休及适用工时制应以劳动合同、公司制度和工作地规定为准。",
+                "《中华人民共和国劳动法》第 36、38、41、44 条；《国务院关于职工工作时间的规定》（国务院令第 174 号，1995-05-01 施行）", "全国", LocalDate.of(1995, 5, 1));
+
+        ensureKnowledge(repository, tenantId, "差旅、费用报销与福利（公司制度项）", "公司制度",
+                "差旅交通、住宿、餐补标准，费用报销范围与凭证要求，以及补充医疗、节日福利等福利项目，通常由公司制度、预算和员工所属主体决定，国家层面没有统一的企业报销金额表。\n"
+                        + "可根据员工的工作地、职级、工种和合同主体匹配已维护制度；若对应制度尚未录入，需由 HR 提供已生效的差旅、报销或福利文件后才能确认额度和材料。",
+                "公司已审核的差旅、费用报销及福利制度；未维护时不作金额承诺", "按公司/工作地", LocalDate.of(2026, 9, 7));
+
+        ensureKnowledge(repository, tenantId, "在职与收入相关证明办理", "自助服务",
+                "可申请标准在职证明或签证/出境在职证明。申请时需明确证明类型、语言、用途，以及是否展示薪资；签证/出境证明还需目的国家或地区、领事馆或受理机构。提交后由 HR 审核，审核通过后可下载已生成文件。\n"
+                        + "收入信息属于敏感信息，只能按本人申请和已审核模板处理；是否加盖电子签章、收入证明的具体格式和领取方式，以公司已配置模板及 HR 审核结果为准。",
+                "本系统证明申请规则（2026-09-07）；《中华人民共和国劳动合同法》第 8 条（如实告知相关信息）", "公司制度", LocalDate.of(2026, 9, 7));
+
+        ensureKnowledge(repository, tenantId, "社保、公积金异地转移与落户咨询", "办事指引",
+                "社保转移接续通常需要在新参保地建立基本养老保险关系后提出申请，由新旧参保地经办机构协同办理；可先准备身份证明、社保卡或参保凭证、联系方式等基础材料。公积金异地转移和落户条件由缴存地、迁入地住房公积金中心及公安机关的现行规定执行。\n"
+                        + "办理前应确认参保/缴存地、迁入地、就业状态和当地线上办理渠道；助手可据此生成材料清单，但不应把通用流程当作当地最终受理标准。",
+                "《城镇企业职工基本养老保险关系转移接续暂行办法》（国办发〔2009〕66 号）；当地社保、公积金及公安部门现行规则", "按参保地/迁入地", LocalDate.of(2010, 1, 1));
+
+        ensureKnowledge(repository, tenantId, "转正、合同续签、体检与年假提醒", "员工服务",
+                "可查询转正、合同续签、体检预约和年假失效等事项的已维护规则、状态和材料。劳动合同续订应在原合同期满前依公司流程办理；符合无固定期限劳动合同法定条件的，应依法处理。\n"
+                        + "提醒功能以 HR 在工作台配置的规则和数据为前提。未配置提醒规则时，助手可以说明办理时间点和所需材料，但不会声称已经发送提醒或完成代办。",
+                "《中华人民共和国劳动合同法》第 10、14 条；公司已配置的转正、续签、体检及年假提醒规则", "公司制度", LocalDate.of(2008, 1, 1));
+    }
+
+    private void ensureKnowledge(
+            KnowledgeArticleRepository repository,
+            Long tenantId,
+            String title,
+            String category,
+            String content,
+            String source,
+            String region,
+            LocalDate publishedAt
+    ) {
+        boolean exists = repository.findByTenantIdOrderByUpdatedAtDesc(tenantId).stream()
+                .anyMatch(article -> title.equals(article.getTitle()));
+        if (!exists) {
+            KnowledgeArticle article = article(tenantId, category, title, content, source, region, "APPROVED");
+            article.setPublishedAt(publishedAt);
+            article.setUpdatedAt(LocalDate.of(2026, 9, 7));
+            repository.save(article);
+        }
     }
 
     private PlatformAccount linkDemoAccount(

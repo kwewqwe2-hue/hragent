@@ -60,7 +60,7 @@ public class VisaCertificateDocumentService {
         Tenant tenant = tenantRepository.findById(request.getTenantId())
                 .orElseThrow(() -> AppException.notFound("企业空间不存在"));
         String employeeNo = sanitizeFilePart(employee.getEmployeeNo());
-        String fileName = "签证在职证明-" + employeeNo + "-" + request.getId() + ".docx";
+        String fileName = "在职证明-" + employeeNo + "-" + request.getId() + ".docx";
         String storageKey = "tenant-" + request.getTenantId()
                 + "/request-" + request.getId()
                 + "/visa-employment-certificate-" + employeeNo + "-" + request.getId() + ".docx";
@@ -112,6 +112,17 @@ public class VisaCertificateDocumentService {
         values.put("{{purpose}}", value(request.getPurpose()));
         values.put("{{destinationCountry}}", value(request.getDestinationCountry()));
         values.put("{{consulateName}}", value(request.getConsulateName()));
+        if (request.getEncryptedTemplateValues() != null) {
+            try {
+                var custom = new com.fasterxml.jackson.databind.ObjectMapper().readValue(secretCryptoService.decrypt(request.getEncryptedTemplateValues()), new com.fasterxml.jackson.core.type.TypeReference<Map<String,String>>() {});
+                custom.forEach((key,value) -> {
+                    String placeholder="{{"+key+"}}";
+                    if(CertificateTemplatePreparationService.SUPPLEMENTABLE.contains(key)&&values.getOrDefault(placeholder,"").isBlank()){
+                        CertificateTemplatePreparationService.validateValue(key,value);values.put(placeholder,value);
+                    }else values.putIfAbsent(placeholder,value);
+                });
+            } catch (java.io.IOException e) { throw new IllegalStateException("模板补充字段读取失败", e); }
+        }
         return values;
     }
 
@@ -119,6 +130,11 @@ public class VisaCertificateDocumentService {
         try (InputStream input = Files.newInputStream(source);
              XWPFDocument document = new XWPFDocument(input);
              OutputStream output = Files.newOutputStream(destination)) {
+            var required = CertificateTemplateFields.normalize(document);
+            for (String key : required) {
+                if (!values.containsKey("{{"+key+"}}")) throw new IllegalStateException("请补充模板字段："+key);
+                if (values.get("{{"+key+"}}") == null) values.put("{{"+key+"}}", "");
+            }
             replaceBodyElements(document.getBodyElements(), values);
             document.getHeaderList().forEach(header -> replaceBodyElements(header.getBodyElements(), values));
             document.getFooterList().forEach(footer -> replaceBodyElements(footer.getBodyElements(), values));
@@ -127,6 +143,7 @@ public class VisaCertificateDocumentService {
             if (!unresolved.isEmpty()) {
                 throw new IllegalStateException("模板包含不支持的占位符：" + String.join("、", unresolved));
             }
+            CertificateTemplateFields.sealAnchor(document);
             document.write(output);
         }
     }
@@ -145,54 +162,7 @@ public class VisaCertificateDocumentService {
     }
 
     private void replaceInParagraph(XWPFParagraph paragraph, String placeholder, String replacement) {
-        while (true) {
-            List<XWPFRun> runs = paragraph.getRuns();
-            if (runs.isEmpty()) {
-                return;
-            }
-            String combined = runs.stream().map(this::runText).reduce("", String::concat);
-            int matchStart = combined.indexOf(placeholder);
-            if (matchStart < 0) {
-                return;
-            }
-            int matchEnd = matchStart + placeholder.length();
-            int cursor = 0;
-            int startRun = -1;
-            int endRun = -1;
-            int startOffset = 0;
-            int endOffset = 0;
-
-            for (int index = 0; index < runs.size(); index++) {
-                String text = runText(runs.get(index));
-                int next = cursor + text.length();
-                if (startRun < 0 && matchStart < next) {
-                    startRun = index;
-                    startOffset = matchStart - cursor;
-                }
-                if (matchEnd <= next) {
-                    endRun = index;
-                    endOffset = matchEnd - cursor;
-                    break;
-                }
-                cursor = next;
-            }
-
-            if (startRun < 0 || endRun < 0) {
-                throw new IllegalStateException("Word 模板占位符结构无法解析：" + placeholder);
-            }
-            String startText = runText(runs.get(startRun));
-            String endText = runText(runs.get(endRun));
-            if (startRun == endRun) {
-                setRunText(runs.get(startRun), startText.substring(0, startOffset)
-                        + replacement + startText.substring(endOffset));
-            } else {
-                setRunText(runs.get(startRun), startText.substring(0, startOffset) + replacement);
-                for (int index = startRun + 1; index < endRun; index++) {
-                    setRunText(runs.get(index), "");
-                }
-                setRunText(runs.get(endRun), endText.substring(endOffset));
-            }
-        }
+        CertificateTemplateFields.replace(paragraph, placeholder, replacement);
     }
 
     private List<String> findUnresolved(XWPFDocument document) {

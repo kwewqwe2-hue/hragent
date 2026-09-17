@@ -20,10 +20,13 @@ const router = createRouter({
         { path: 'onboarding', component: () => import('../views/OnboardingView.vue') },
         { path: 'platform-admin', component: () => import('../views/PlatformAdminView.vue') },
         { path: 'dashboard', component: () => import('../views/DashboardView.vue') },
+        { path: 'employee-services', component: () => import('../views/EmployeeServicesView.vue') },
+        { path: 'employee-experience', component: () => import('../views/EmployeeExperienceView.vue') },
         { path: 'directory', component: () => import('../views/DirectoryView.vue') },
         { path: 'my-leave', component: () => import('../views/MyLeaveView.vue') },
         { path: 'manager-approval', component: () => import('../views/ManagerApprovalView.vue') },
         { path: 'hr-record', component: () => import('../views/HrRecordView.vue') },
+        { path: 'hrssc', component: () => import('../views/HrsscView.vue') },
         { path: 'all-records', component: () => import('../views/AllRecordsView.vue') },
         { path: 'employees', component: () => import('../views/EmployeesView.vue') },
         { path: 'members', component: () => import('../views/WorkspaceMembersView.vue') },
@@ -33,7 +36,7 @@ const router = createRouter({
         { path: 'open-platform', component: () => import('../views/OpenPlatformView.vue') },
         { path: 'ai-config', component: () => import('../views/AiConfigView.vue') },
         { path: 'knowledge', component: () => import('../views/KnowledgeView.vue') },
-        { path: 'assistant', component: () => import('../views/AssistantView.vue') },
+        { path: 'assistant', beforeEnter: () => { window.location.assign('/agent/'); return false }, component: () => import('../views/AssistantView.vue') },
         { path: 'logs', component: () => import('../views/LogsView.vue') }
       ]
     }
@@ -54,7 +57,7 @@ router.beforeEach((to) => {
     return '/workspace'
   }
   if (to.meta.requiresAuth && auth.user?.role === 'NEW_HIRE'
-      && !['/onboarding', '/assistant', '/workspace', '/account'].includes(to.path)) {
+      && !['/onboarding', '/assistant', '/workspace', '/account', '/employee-services', '/employee-experience'].includes(to.path)) {
     return '/onboarding'
   }
   return true

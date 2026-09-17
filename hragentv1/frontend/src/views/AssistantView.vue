@@ -10,7 +10,11 @@ import { onMounted } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
 
 onMounted(() => {
-  window.location.assign('http://localhost:5174')
+  const { hostname, port, protocol } = window.location
+  const chatHost = hostname.startsWith('app.') ? `chat.${hostname.slice(4)}` : hostname
+  const chatPort = port === '5173' ? ':5174' : port ? `:${port}` : ''
+  // Replace this launch route so browser Back returns to the previous workbench page.
+  window.location.replace(`${protocol}//${chatHost}${chatPort}`)
 })
 </script>
 

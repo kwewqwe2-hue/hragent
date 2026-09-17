@@ -1,107 +1,74 @@
 <template>
   <div>
     <div class="page-title">
-      <div>
-        <h1>开放平台</h1>
-        <p>当前身份：{{ roleLabel }} · {{ auth.user?.workspaceName }}</p>
-      </div>
+      <div><h1>开放平台</h1><p>{{ canManage ? '管理企业集成密钥，并完成员工开放平台授权审批。' : '提交并跟进开放平台权限申请。' }}</p></div>
+      <el-button :icon="Refresh" :loading="loading || accessLoading" @click="refreshAll">刷新</el-button>
     </div>
 
-    <section class="content-panel api-section">
-      <div class="section-row">
-        <div class="section-icon"><el-icon><Key /></el-icon></div>
-        <div class="section-copy">
-          <strong>个人平台 API</strong>
-          <span>本人档案、假期余额、申请记录和同步状态</span>
-        </div>
-        <el-tag type="info">下一阶段</el-tag>
-      </div>
-    </section>
+    <template v-if="canManage">
+      <section class="content-panel intro"><div><strong>企业系统接入</strong><span>API Key 仅供 HR 管理的企业集成使用。</span></div><el-button type="primary" :icon="Plus" @click="createKey">创建 API Key</el-button></section>
+      <el-row :gutter="16"><el-col :xs="24" :lg="12"><section class="content-panel"><div class="toolbar-row"><strong>接入密钥</strong><span class="muted">{{ keys.length }} 个</span></div><el-table v-loading="loading" :data="keys" stripe empty-text="尚无 API Key"><el-table-column prop="name" label="名称" /><el-table-column prop="keyPrefix" label="前缀" width="128" /><el-table-column label="状态" width="80"><template #default="{ row }"><el-tag :type="row.active ? 'success' : 'info'">{{ row.active ? '启用' : '停用' }}</el-tag></template></el-table-column><el-table-column label="操作" width="82"><template #default="{ row }"><el-button link :type="row.active ? 'danger' : 'primary'" :loading="togglingId === row.id" @click="toggle(row)">{{ row.active ? '停用' : '启用' }}</el-button></template></el-table-column></el-table></section></el-col>
+      <el-col :xs="24" :lg="12"><section class="content-panel"><div class="toolbar-row"><strong>可用接口</strong><span class="muted">Base URL: /api</span></div><div v-for="endpoint in endpoints" :key="endpoint.path" class="endpoint"><el-tag :type="endpoint.method === 'POST' ? 'warning' : 'success'" effect="plain">{{ endpoint.method }}</el-tag><code>{{ endpoint.path }}</code><span>{{ endpoint.description }}</span></div><el-alert class="tip" type="info" :closable="false" title="调用时在请求头中传入 X-API-Key。" /></section></el-col></el-row>
+      <section class="content-panel logs"><div class="toolbar-row"><strong>最近调用</strong></div><el-table v-loading="loading" :data="logs" stripe empty-text="尚无接口调用"><el-table-column prop="createdAt" label="时间" width="170" /><el-table-column prop="method" label="方法" width="82" /><el-table-column prop="path" label="路径" min-width="220" /><el-table-column prop="statusCode" label="状态" width="76" /><el-table-column prop="message" label="结果" /></el-table></section>
+      <section class="content-panel logs"><div class="toolbar-row"><strong>员工授权待审</strong><span class="muted">主管审批通过或主管直接发起的申请会进入此处</span></div><el-table v-loading="accessLoading" :data="hrRequests" stripe empty-text="暂无待审批申请"><el-table-column prop="employeeName" label="员工" /><el-table-column prop="managerName" label="直属主管" /><el-table-column label="权限"><template #default="{ row }">{{ scopes(row) }}</template></el-table-column><el-table-column prop="reason" label="申请说明" min-width="180" /><el-table-column label="操作" width="160"><template #default="{ row }"><el-button link type="primary" @click="reviewRequest('hr', row, true)">通过</el-button><el-button link type="danger" @click="reviewRequest('hr', row, false)">驳回</el-button></template></el-table-column></el-table></section>
+    </template>
 
-    <section class="content-panel api-section">
-      <div class="section-row">
-        <div class="section-icon agent"><el-icon><ChatDotRound /></el-icon></div>
-        <div class="section-copy">
-          <strong>个人智能体 API</strong>
-          <span>根据当前空间身份授予智能体工具权限</span>
-        </div>
-        <el-tag type="info">下一阶段</el-tag>
-      </div>
-    </section>
+    <template v-else-if="isManager">
+      <section class="content-panel"><div class="toolbar-row"><strong>主管发起</strong><span class="muted">为直属员工直接提交至 HR 审批</span></div><el-form label-position="top"><el-form-item label="员工"><el-select v-model="selectedEmployeeId" filterable style="width:100%"><el-option v-for="employee in employees" :key="employee.id" :value="employee.id" :label="`${employee.name} · ${employee.department}`" /></el-select></el-form-item><el-form-item label="申请权限"><el-checkbox v-model="requestPlatform">平台 API</el-checkbox><el-checkbox v-model="requestAgent">智能体权限</el-checkbox></el-form-item><el-form-item label="申请说明"><el-input v-model="requestReason" type="textarea" maxlength="600" show-word-limit /></el-form-item><el-button type="primary" :loading="submittingAccess" @click="submitManagerAccess">提交 HR 审批</el-button></el-form></section>
+      <section class="content-panel logs"><div class="toolbar-row"><strong>员工申请待处理</strong></div><el-table v-loading="accessLoading" :data="accessRequests" stripe empty-text="暂无申请"><el-table-column prop="employeeName" label="员工" /><el-table-column label="权限"><template #default="{ row }">{{ scopes(row) }}</template></el-table-column><el-table-column prop="reason" label="申请说明" min-width="180" /><el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template></el-table-column><el-table-column prop="reviewOpinion" label="审批意见" min-width="140" /><el-table-column label="操作" width="160"><template #default="{ row }"><template v-if="row.status === 'PENDING_MANAGER'"><el-button link type="primary" @click="reviewRequest('manager', row, true)">通过</el-button><el-button link type="danger" @click="reviewRequest('manager', row, false)">驳回</el-button></template><span v-else class="muted">已处理</span></template></el-table-column></el-table></section>
+    </template>
 
-    <section class="content-panel api-section">
-      <div class="section-row">
-        <div class="section-icon plugin"><el-icon><Grid /></el-icon></div>
-        <div class="section-copy">
-          <strong>插件市场</strong>
-          <span>暂无可用插件</span>
-        </div>
-        <el-tag type="info">暂未开放</el-tag>
-      </div>
-    </section>
+    <template v-else>
+      <section v-if="approvedRequests.length" class="content-panel"><div class="toolbar-row"><div><strong>我的开放能力</strong><span class="muted">请选择已授权能力并开始使用</span></div><el-button link type="primary" @click="showApplication = !showApplication">申请其他权限</el-button></div><el-radio-group v-model="selectedTool" class="tool-picker" @change="clearToolResult"><el-radio-button v-if="hasPlatformAccess" label="profile">个人档案</el-radio-button><el-radio-button v-if="hasPlatformAccess" label="balances">假期余额</el-radio-button><el-radio-button v-if="hasAgentAccess" label="agent">HRAgent AI</el-radio-button></el-radio-group><div class="tool-action"><template v-if="selectedTool === 'agent'"><span>已获得智能体服务权限，可进入 HRAgent AI 发起咨询和办理事务。</span><el-button type="primary" @click="openAssistant">打开 HRAgent AI</el-button></template><template v-else><span>{{ selectedTool === 'profile' ? '加载本人在职档案信息。' : '加载本人当前假期余额。' }}</span><el-button type="primary" :loading="toolLoading" @click="loadTool">加载数据</el-button></template></div><el-descriptions v-if="selectedTool === 'profile' && personalDetail" class="tool-result" :column="2" border><el-descriptions-item label="姓名">{{ personalDetail.employee.name }}</el-descriptions-item><el-descriptions-item label="工号">{{ personalDetail.employee.employeeNo }}</el-descriptions-item><el-descriptions-item label="部门">{{ personalDetail.employee.department }}</el-descriptions-item><el-descriptions-item label="职位">{{ personalDetail.employee.title }}</el-descriptions-item><el-descriptions-item label="邮箱">{{ personalDetail.employee.email || '-' }}</el-descriptions-item><el-descriptions-item label="直属主管">{{ personalDetail.employee.managerName || '-' }}</el-descriptions-item></el-descriptions><el-table v-if="selectedTool === 'balances' && personalDetail" class="tool-result" :data="personalDetail.balances" stripe empty-text="暂无假期余额"><el-table-column prop="leaveTypeLabel" label="假期类型" /><el-table-column prop="totalDays" label="总天数" /><el-table-column prop="usedDays" label="已使用" /><el-table-column prop="remainingDays" label="剩余" /></el-table></section>
+      <section v-if="showApplication" class="content-panel" :class="{ logs: approvedRequests.length }"><div class="toolbar-row"><strong>申请开放平台权限</strong><span class="muted">提交后将依次由直属主管和 HR 审批</span></div><el-form label-position="top"><el-form-item label="申请权限"><el-checkbox v-model="requestPlatform">平台 API</el-checkbox><el-checkbox v-model="requestAgent">智能体权限</el-checkbox></el-form-item><el-form-item label="申请说明"><el-input v-model="requestReason" type="textarea" maxlength="600" show-word-limit /></el-form-item><el-button type="primary" :loading="submittingAccess" @click="submitEmployeeAccess">提交申请</el-button></el-form></section>
+      <section class="content-panel logs"><div class="toolbar-row"><strong>我的授权申请</strong></div><el-table v-loading="accessLoading" :data="accessRequests" stripe empty-text="暂无授权申请"><el-table-column prop="managerName" label="直属主管" /><el-table-column label="权限"><template #default="{ row }">{{ scopes(row) }}</template></el-table-column><el-table-column prop="reason" label="申请说明" min-width="180" /><el-table-column label="状态" width="130"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template></el-table-column><el-table-column prop="reviewOpinion" label="最新审批意见" min-width="160" /></el-table></section>
+    </template>
+
+    <el-dialog v-model="keyVisible" title="API Key 已创建" width="min(620px, calc(100% - 32px))" :close-on-click-modal="false"><el-alert type="warning" :closable="false" title="密钥明文只显示一次，请立即保存。" /><el-input class="created-key" :model-value="createdKey" readonly><template #append><el-button @click="copyKey">复制</el-button></template></el-input></el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ChatDotRound, Grid, Key } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { Plus, Refresh } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getData, http, postData, putData } from '../api/http'
+import type { ApiCallLog, ApiKeyCreateResponse, ApiKeyView, DirectoryOverview, Employee, EmployeeDetail } from '../api/types'
 import { useAuthStore } from '../stores/auth'
+import { useRouter } from 'vue-router'
 
+type PlatformAccessRequest = { id: number; employeeId: number; employeeName: string; managerName: string; platformApi: boolean; agentApi: boolean; status: string; reason?: string; reviewOpinion?: string }
 const auth = useAuthStore()
-const roleLabel = computed(() => {
-  if (auth.user?.role === 'HR') return '空间管理员'
-  if (auth.user?.role === 'MANAGER') return '主管'
-  return '员工'
-})
+const router = useRouter()
+const canManage = computed(() => auth.user?.role === 'HR')
+const isManager = computed(() => auth.user?.role === 'MANAGER')
+const keys = ref<ApiKeyView[]>([]); const logs = ref<ApiCallLog[]>([]); const loading = ref(false); const togglingId = ref<number | null>(null); const keyVisible = ref(false); const createdKey = ref('')
+const employees = ref<Employee[]>([]); const accessRequests = ref<PlatformAccessRequest[]>([]); const hrRequests = ref<PlatformAccessRequest[]>([]); const selectedEmployeeId = ref<number | null>(null); const requestPlatform = ref(true); const requestAgent = ref(true); const requestReason = ref(''); const accessLoading = ref(false); const submittingAccess = ref(false)
+const approvedRequests = computed(() => accessRequests.value.filter((request) => request.status === 'APPROVED'))
+const hasPlatformAccess = computed(() => approvedRequests.value.some((request) => request.platformApi))
+const hasAgentAccess = computed(() => approvedRequests.value.some((request) => request.agentApi))
+const selectedTool = ref<'profile' | 'balances' | 'agent'>('profile'); const showApplication = ref(true); const toolLoading = ref(false); const personalDetail = ref<EmployeeDetail | null>(null)
+const endpoints = [{ method: 'GET', path: '/openapi/v1/employees/{employeeNo}', description: '查询员工档案' }, { method: 'GET', path: '/openapi/v1/balances/{employeeNo}', description: '查询假期余额' }, { method: 'POST', path: '/openapi/v1/employees/sync', description: '同步员工资料' }]
+const statusLabels: Record<string, string> = { PENDING: '待 HR 审批', PENDING_MANAGER: '待主管审批', PENDING_HR: '待 HR 审批', APPROVED: '已授权', REJECTED: '已驳回' }
+function statusLabel(status: string) { return statusLabels[status] || status }
+function statusType(status: string) { return status === 'APPROVED' ? 'success' : status === 'REJECTED' ? 'danger' : 'warning' }
+function scopes(row: PlatformAccessRequest) { return [row.platformApi ? '平台 API' : '', row.agentApi ? '智能体权限' : ''].filter(Boolean).join('、') }
+async function load() { if (!canManage.value) return; loading.value = true; try { [keys.value, logs.value] = await Promise.all([getData<ApiKeyView[]>('/admin/api-keys'), getData<ApiCallLog[]>('/admin/api-call-logs')]) } finally { loading.value = false } }
+async function loadAccess() { accessLoading.value = true; try { if (canManage.value) hrRequests.value = await getData<PlatformAccessRequest[]>('/platform-access/hr/pending'); else if (isManager.value) { const [directory, requests] = await Promise.all([getData<DirectoryOverview>('/directory'), getData<PlatformAccessRequest[]>('/platform-access/manager')]); employees.value = directory.employees.filter((employee) => employee.role === 'EMPLOYEE' && employee.managerId === auth.user?.employeeProfileId); accessRequests.value = requests } else { accessRequests.value = await getData<PlatformAccessRequest[]>('/platform-access/mine'); if (approvedRequests.value.length) { showApplication.value = false; if (!hasPlatformAccess.value && hasAgentAccess.value) selectedTool.value = 'agent' } } } finally { accessLoading.value = false } }
+async function refreshAll() { await Promise.all([load(), loadAccess()]) }
+function validScope() { if (requestPlatform.value || requestAgent.value) return true; ElMessage.warning('请至少选择一项权限'); return false }
+async function submitEmployeeAccess() { if (!validScope()) return; submittingAccess.value = true; try { await postData('/platform-access/requests', { platformApi: requestPlatform.value, agentApi: requestAgent.value, reason: requestReason.value }); ElMessage.success('申请已提交，等待主管审批'); requestReason.value = ''; await loadAccess() } finally { submittingAccess.value = false } }
+function clearToolResult() { personalDetail.value = null }
+async function loadTool() { if (!auth.user?.employeeProfileId) return; toolLoading.value = true; try { personalDetail.value = await getData<EmployeeDetail>(`/directory/employees/${auth.user.employeeProfileId}`) } finally { toolLoading.value = false } }
+function openAssistant() { router.push('/assistant') }
+async function submitManagerAccess() { if (!selectedEmployeeId.value || !validScope()) { if (!selectedEmployeeId.value) ElMessage.warning('请选择直属员工'); return } submittingAccess.value = true; try { await postData('/platform-access/requests', { employeeId: selectedEmployeeId.value, platformApi: requestPlatform.value, agentApi: requestAgent.value, reason: requestReason.value }); ElMessage.success('申请已提交至 HR 审批'); requestReason.value = ''; await loadAccess() } finally { submittingAccess.value = false } }
+async function reviewRequest(stage: 'manager' | 'hr', row: PlatformAccessRequest, approved: boolean) { const action = approved ? '通过' : '驳回'; const { value } = await ElMessageBox.prompt(`请填写${action}意见${approved ? '（可选）' : ''}`, `${stage === 'hr' ? 'HR' : '主管'}审批`, { inputType: 'textarea', inputPlaceholder: approved ? '可填写审批说明' : '请填写驳回原因', inputValidator: (input: string) => approved || input.trim() ? true : '驳回时必须填写原因', confirmButtonText: action, cancelButtonText: '取消' }); await putData(`/platform-access/${stage === 'hr' ? 'hr' : 'manager'}/${row.id}/review`, { approved, opinion: value?.trim() || '' }); ElMessage.success(`已${action}`); await loadAccess() }
+async function createKey() { const { value } = await ElMessageBox.prompt('为外部系统接入命名', '创建 API Key', { inputPlaceholder: '例如：考勤系统', inputValidator: (input: string) => input.trim() ? true : '请输入名称', confirmButtonText: '创建', cancelButtonText: '取消' }); const response = await postData<ApiKeyCreateResponse>('/admin/api-keys', { name: value.trim() }); createdKey.value = response.apiKey; keyVisible.value = true; await load() }
+async function toggle(row: ApiKeyView) { togglingId.value = row.id; try { await http.patch(`/admin/api-keys/${row.id}/active?active=${!row.active}`); ElMessage.success(row.active ? 'API Key 已停用' : 'API Key 已启用'); await load() } finally { togglingId.value = null } }
+async function copyKey() { await navigator.clipboard.writeText(createdKey.value); ElMessage.success('API Key 已复制') }
+onMounted(refreshAll)
 </script>
 
 <style scoped>
-.api-section {
-  max-width: 900px;
-  margin-bottom: 12px;
-}
-
-.section-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.section-icon {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  display: grid;
-  place-items: center;
-  color: #1d4ed8;
-  background: #eaf2ff;
-  border-radius: 8px;
-  font-size: 20px;
-}
-
-.section-icon.agent {
-  color: #047857;
-  background: #e8f6ed;
-}
-
-.section-icon.plugin {
-  color: #9a6700;
-  background: #fff7e6;
-}
-
-.section-copy {
-  min-width: 0;
-  flex: 1;
-}
-
-.section-copy strong,
-.section-copy span {
-  display: block;
-}
-
-.section-copy span {
-  margin-top: 4px;
-  color: #687386;
-  font-size: 13px;
-}
+.intro,.toolbar-row,.tool-action{display:flex;align-items:center;justify-content:space-between;gap:16px}.intro{margin-bottom:16px}.intro strong,.intro span{display:block}.intro span,.endpoint span,.muted{margin-top:4px;color:#667085;font-size:13px}.endpoint{display:grid;grid-template-columns:60px minmax(0,1fr);gap:6px 10px;padding:10px;margin-top:10px;border:1px solid #e3e8ef;border-radius:6px}.endpoint code{overflow:hidden;color:#1d4ed8;text-overflow:ellipsis;white-space:nowrap}.endpoint span{grid-column:2;margin:0;font-size:12px}.tool-picker{margin-top:18px}.tool-action{margin-top:18px;padding:14px;background:#f7f9fc;border:1px solid #e3e8ef;border-radius:6px}.tool-result,.tip,.logs,.created-key{margin-top:16px}@media(max-width:700px){.intro,.toolbar-row,.tool-action{align-items:flex-start;flex-direction:column}}
 </style>

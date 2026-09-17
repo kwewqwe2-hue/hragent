@@ -1,0 +1,25 @@
+{
+    email {$CADDY_EMAIL}
+}
+
+{$APP_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:5173
+}
+
+{$CHAT_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:5174
+}
+
+# n8n is deliberately not an Internet-facing admin application. Only its
+# published webhook endpoints are reachable through this hostname. Use an SSH
+# tunnel when an administrator needs the n8n editor.
+{$N8N_DOMAIN} {
+    @webhooks path /webhook/* /webhook-test/*
+    handle @webhooks {
+        reverse_proxy 127.0.0.1:5678
+    }
+
+    respond "Not found" 404
+}

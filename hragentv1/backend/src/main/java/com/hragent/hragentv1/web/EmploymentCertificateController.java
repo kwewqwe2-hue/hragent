@@ -53,28 +53,32 @@ public class EmploymentCertificateController {
             HttpServletRequest servletRequest,
             @RequestPart("file") MultipartFile file,
             @RequestParam String templateName,
+            @RequestParam(defaultValue = "VISA") EmploymentCertificateType certificateType,
+            @RequestParam(defaultValue = "{}") String templateValues,
             @RequestParam CertificateLanguage language,
             @RequestParam String purpose,
-            @RequestParam String destinationCountry,
-            @RequestParam String consulateName,
+            @RequestParam(required = false) String destinationCountry,
+            @RequestParam(required = false) String consulateName,
             @RequestParam(defaultValue = "false") boolean includeSalary,
             @RequestParam(required = false) String remarks
     ) {
         UserAccount actor = authService.requireUser(servletRequest);
         EmploymentCertificateDtos.CreateRequest input = new EmploymentCertificateDtos.CreateRequest(
-                EmploymentCertificateType.VISA,
+                certificateType,
                 language,
                 purpose,
                 destinationCountry,
                 consulateName,
                 includeSalary,
-                remarks
+                remarks, null, parseValues(templateValues)
         );
         return ApiResponse.ok(
                 "申请和模板已提交，等待 HR 一次审核",
                 certificateService.createWithTemplate(actor, input, file, templateName)
         );
     }
+
+    private java.util.Map<String,String> parseValues(String value) { try { return new com.fasterxml.jackson.databind.ObjectMapper().readValue(value, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String,String>>() {}); } catch (Exception e) { throw AppException.badRequest("模板字段格式不正确"); } }
 
     @GetMapping("/my")
     public ApiResponse<List<EmploymentCertificateDtos.RequestView>> mine(HttpServletRequest request) {

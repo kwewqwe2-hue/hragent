@@ -27,12 +27,21 @@ http.interceptors.response.use(
       ElMessage.error(body.message || '请求失败')
       return Promise.reject(new Error(body.message))
     }
+    const path=(response.config.url||'').replace(/^\/api/,'').split('?')[0]
+    const method=(response.config.method||'get').toLowerCase()
+    const submitted=method==='post'&&/^\/(leave|employment-certificates(?:\/with-template)?|onboarding|platform-access\/requests)$/.test(path)
+    const reviewed=['post','put'].includes(method)&&/^\/(?:leave\/(?:hr\/\d+\/record|manager\/\d+\/review)|employment-certificates\/hr\/\d+\/(?:review|generate)|onboarding\/hr\/\d+\/review|lifecycle\/hr\/\d+\/review|platform-access\/(?:hr|manager)\/\d+\/review)$/.test(path)
+    if(body?.success&&(submitted||reviewed)&&window.parent!==window){
+      const parentOrigin=document.referrer?new URL(document.referrer).origin:window.location.origin
+      window.parent.postMessage({type:'hragent:approval-change',stage:submitted?'submitted':'reviewed',workspaceId:localStorage.getItem('hragent_workspace_id')},parentOrigin)
+    }
     return response
   },
   (error) => {
     const status = error.response?.status
     const message = error.response?.data?.message || error.message || '网络错误'
     if (status === 401) {
+      localStorage.removeItem('hragent_ai_auth')
       localStorage.removeItem('hragent_token')
       localStorage.removeItem('hragent_user')
       localStorage.removeItem('hragent_workspaces')
@@ -65,7 +74,10 @@ export async function deleteData<T = any>(url: string): Promise<T> {
 }
 
 export async function downloadBinary(url: string, fileName: string): Promise<void> {
-  const response = await http.get<Blob>(url, { responseType: 'blob' })
+  const response = await http.get<Blob>(url, { responseType: 'blob', timeout: 65000 })
+  const magic=await response.data.slice(0,5).text()
+  if(fileName.toLowerCase().endsWith('.pdf')&&magic!=='%PDF-')throw new Error('下载内容不是完整 PDF，请重试')
+  if(fileName.toLowerCase().endsWith('.docx')&&!magic.startsWith('PK'))throw new Error('下载内容不是 Word 文件，请重试')
   const objectUrl = URL.createObjectURL(response.data)
   const link = document.createElement('a')
   link.href = objectUrl
@@ -73,7 +85,7 @@ export async function downloadBinary(url: string, fileName: string): Promise<voi
   document.body.appendChild(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(objectUrl)
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 30000)
 }
 
 export async function uploadKnowledgeFile(
@@ -126,6 +138,8 @@ export async function createCertificateWithTemplate(
   file: File,
   data: {
     templateName: string
+    certificateType: string
+    templateValues: Record<string,string>
     language: string
     purpose: string
     destinationCountry: string
@@ -137,6 +151,8 @@ export async function createCertificateWithTemplate(
   const formData = new FormData()
   formData.append('file', file)
   formData.append('templateName', data.templateName)
+  formData.append('certificateType', data.certificateType)
+  formData.append('templateValues', JSON.stringify(data.templateValues))
   formData.append('language', data.language)
   formData.append('purpose', data.purpose)
   formData.append('destinationCountry', data.destinationCountry)

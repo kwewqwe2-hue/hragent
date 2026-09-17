@@ -38,6 +38,30 @@ public class KnowledgeArticle {
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(length = 240)
+    private String jobGrades;
+    @Column(length = 240)
+    private String workTypes;
+    @Column(length = 500)
+    private String legalEntities;
+    @Column(length = 1000)
+    private String sourceUrl;
+    private LocalDate effectiveFrom;
+    private LocalDate effectiveTo;
+
+    public String getJobGrades() { return jobGrades; }
+    public void setJobGrades(String value) { this.jobGrades = value; }
+    public String getWorkTypes() { return workTypes; }
+    public void setWorkTypes(String value) { this.workTypes = value; }
+    public String getLegalEntities() { return legalEntities; }
+    public void setLegalEntities(String value) { this.legalEntities = value; }
+    public String getSourceUrl() { return sourceUrl; }
+    public void setSourceUrl(String value) { this.sourceUrl = value; }
+    public LocalDate getEffectiveFrom() { return effectiveFrom; }
+    public void setEffectiveFrom(LocalDate value) { this.effectiveFrom = value; }
+    public LocalDate getEffectiveTo() { return effectiveTo; }
+    public void setEffectiveTo(LocalDate value) { this.effectiveTo = value; }
+
     public Long getId() {
         return id;
     }

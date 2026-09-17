@@ -33,6 +33,9 @@ public class EmploymentCertificateTemplateController {
         this.templateService = templateService;
     }
 
+    @GetMapping("/{id}/preview")
+    public ApiResponse<?> inspect(HttpServletRequest request,@PathVariable Long id) { return ApiResponse.ok(templateService.inspect(authService.requireUser(request),id)); }
+
     @GetMapping
     public ApiResponse<List<EmploymentCertificateTemplateDtos.TemplateView>> list(HttpServletRequest request) {
         UserAccount actor = authService.requireUser(request);
@@ -53,8 +56,8 @@ public class EmploymentCertificateTemplateController {
             HttpServletRequest request,
             @RequestPart("file") MultipartFile file,
             @RequestParam String name,
-            @RequestParam String destinationCountry,
-            @RequestParam String consulateName,
+            @RequestParam(defaultValue = "通用") String destinationCountry,
+            @RequestParam(defaultValue = "通用") String consulateName,
             @RequestParam CertificateLanguage language
     ) {
         UserAccount actor = requireHr(request);

@@ -128,7 +128,7 @@ class EmploymentCertificateTemplateServiceTest {
     }
 
     @Test
-    void rejectsUploadWhenTemplateHasUnsupportedFields() throws Exception {
+    void extractsCustomFieldsForApplicantCompletion() throws Exception {
         UserAccount hr = user(2L, 1L, Role.HR);
         MockMultipartFile file = new MockMultipartFile(
                 "file",
@@ -137,9 +137,9 @@ class EmploymentCertificateTemplateServiceTest {
                 docxWithText("{{unknownField}} {{legalName}}")
         );
 
-        assertThatThrownBy(() -> service.upload(
-                hr, file, "未知字段模板", "德国", "德国驻华大使馆", CertificateLanguage.ENGLISH
-        )).isInstanceOf(AppException.class).hasMessageContaining("不支持的占位符");
+        var preview=service.preview(hr,file);
+        assertThat(preview.canUpload()).isTrue();
+        assertThat(preview.unsupportedPlaceholders()).containsExactly("{{unknownField}}");
     }
 
     @Test
@@ -202,6 +202,7 @@ class EmploymentCertificateTemplateServiceTest {
     void employeeListsCompanyTemplatesAndOwnPendingTemplateOnly() {
         UserAccount employee = user(3L, 1L, Role.EMPLOYEE);
         EmploymentCertificateTemplate company = template(1L, 2L, true, CertificateTemplateReviewStatus.APPROVED);
+        company.setTemplateSource("COMPANY");
         EmploymentCertificateTemplate own = template(2L, 3L, false, CertificateTemplateReviewStatus.PENDING);
         EmploymentCertificateTemplate other = template(3L, 4L, false, CertificateTemplateReviewStatus.PENDING);
         when(templateRepository.findByTenantIdOrderByUpdatedAtDesc(1L))

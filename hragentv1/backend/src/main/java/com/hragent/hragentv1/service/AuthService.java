@@ -100,6 +100,18 @@ public class AuthService {
                 .orElseThrow(() -> AppException.unauthorized("登录已失效，请重新登录"));
     }
 
+    // Former employees keep only lifecycle self-service access, never general workspace privileges.
+    public UserAccount requireLifecycleUser(HttpServletRequest request) {
+        PlatformAccount account = requireAccount(request);
+        WorkspaceMembership membership = resolveMembership(request, account.getId(), true);
+        if (membership.getEmployeeProfileId() == null) throw AppException.forbidden("没有绑定员工档案");
+        UserAccount employee = userAccountRepository.findById(membership.getEmployeeProfileId())
+                .filter(u -> u.getTenantId().equals(membership.getWorkspaceId()) && account.getId().equals(u.getAccountId()))
+                .orElseThrow(() -> AppException.forbidden("员工身份关联不一致"));
+        if (employee.getEmployeeStatus() == EmployeeStatus.LEFT) return employee;
+        return requireUser(request);
+    }
+
     public UserAccount requireUser(HttpServletRequest request) {
         PlatformAccount account = requireAccount(request);
         WorkspaceMembership membership = resolveMembership(request, account.getId(), true);
@@ -107,7 +119,7 @@ public class AuthService {
             throw AppException.forbidden("当前空间尚未完成员工档案绑定");
         }
         UserAccount user = userAccountRepository.findById(membership.getEmployeeProfileId())
-                .filter(UserAccount::isActive)
+                .filter(u -> u.isActive() && u.getEmployeeStatus() != EmployeeStatus.LEFT)
                 .orElseThrow(() -> AppException.forbidden("员工档案不可用，请联系空间管理员"));
         if (!user.getTenantId().equals(membership.getWorkspaceId())) {
             throw AppException.forbidden("空间成员数据不一致");

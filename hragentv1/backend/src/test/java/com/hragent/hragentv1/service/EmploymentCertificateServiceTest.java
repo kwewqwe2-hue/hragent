@@ -96,6 +96,20 @@ class EmploymentCertificateServiceTest {
     }
 
     @Test
+    void incomeCertificateAlwaysIncludesSalaryAndStillRequiresHrReview() {
+        UserAccount employee = employee(3L, 1L, Role.EMPLOYEE);
+        when(requestRepository.save(any(EmploymentCertificateRequest.class))).thenAnswer(invocation -> {
+            EmploymentCertificateRequest saved = invocation.getArgument(0); saved.setId(90L); return saved;
+        });
+        when(profileRepository.findByTenantIdAndEmployeeId(1L, 3L)).thenReturn(Optional.of(readyProfile(employee)));
+        var result = service.create(employee, new EmploymentCertificateDtos.CreateRequest(
+                EmploymentCertificateType.INCOME, CertificateLanguage.CHINESE, "银行业务", null, null, false, null));
+        assertThat(result.includeSalary()).isTrue();
+        assertThat(result.status()).isEqualTo(CertificateRequestStatus.PENDING_HR);
+        assertThat(result.documentReady()).isFalse();
+    }
+
+    @Test
     void employeeCreatesVisaRequestWithPendingDocxTemplate() {
         UserAccount employee = employee(3L, 1L, Role.EMPLOYEE);
         EmployeePersonalProfile profile = readyProfile(employee);
@@ -174,7 +188,7 @@ class EmploymentCertificateServiceTest {
     void employeeCannotCancelAnotherEmployeesRequest() {
         UserAccount employee = employee(3L, 1L, Role.EMPLOYEE);
         EmploymentCertificateRequest request = request(18L, 1L, 4L);
-        when(requestRepository.findByIdAndTenantId(18L, 1L)).thenReturn(Optional.of(request));
+        when(requestRepository.lockForUpdate(18L, 1L)).thenReturn(Optional.of(request));
 
         assertThatThrownBy(() -> service.cancel(employee, 18L))
                 .isInstanceOf(AppException.class)
@@ -188,7 +202,7 @@ class EmploymentCertificateServiceTest {
         EmploymentCertificateRequest request = request(21L, 1L, 3L);
         request.setCertificateType(EmploymentCertificateType.VISA);
         request.setIncludeSalary(true);
-        when(requestRepository.findByIdAndTenantId(21L, 1L)).thenReturn(Optional.of(request));
+        when(requestRepository.lockForUpdate(21L, 1L)).thenReturn(Optional.of(request));
         when(userAccountRepository.findById(3L)).thenReturn(Optional.of(target));
         when(profileRepository.findByTenantIdAndEmployeeId(1L, 3L)).thenReturn(Optional.of(readyProfile(target)));
         when(requestRepository.save(any(EmploymentCertificateRequest.class)))
@@ -217,7 +231,7 @@ class EmploymentCertificateServiceTest {
         UserAccount target = employee(3L, 1L, Role.EMPLOYEE);
         EmployeePersonalProfile profile = readyProfile(target);
         EmploymentCertificateRequest request = request(23L, 1L, 3L);
-        when(requestRepository.findByIdAndTenantId(23L, 1L)).thenReturn(Optional.of(request));
+        when(requestRepository.lockForUpdate(23L, 1L)).thenReturn(Optional.of(request));
         when(userAccountRepository.findById(3L)).thenReturn(Optional.of(target));
         when(profileRepository.findByTenantIdAndEmployeeId(1L, 3L)).thenReturn(Optional.of(profile));
         when(documentService.generateStandardChinese(request, target, profile))
@@ -252,7 +266,7 @@ class EmploymentCertificateServiceTest {
         request.setRequestedTemplateId(8L);
         request.setRequestedTemplateFileName("germany.docx");
         EmploymentCertificateTemplate template = template(8L, 1L);
-        when(requestRepository.findByIdAndTenantId(24L, 1L)).thenReturn(Optional.of(request));
+        when(requestRepository.lockForUpdate(24L, 1L)).thenReturn(Optional.of(request));
         when(userAccountRepository.findById(3L)).thenReturn(Optional.of(target));
         when(profileRepository.findByTenantIdAndEmployeeId(1L, 3L)).thenReturn(Optional.of(profile));
         when(templateService.reviewProposal(hr, 8L, 3L, true, "同意开具"))
@@ -289,7 +303,7 @@ class EmploymentCertificateServiceTest {
         EmploymentCertificateTemplate template = template(19L, 1L);
         template.setReviewStatus(CertificateTemplateReviewStatus.REJECTED);
         template.setActive(false);
-        when(requestRepository.findByIdAndTenantId(27L, 1L)).thenReturn(Optional.of(request));
+        when(requestRepository.lockForUpdate(27L, 1L)).thenReturn(Optional.of(request));
         when(userAccountRepository.findById(3L)).thenReturn(Optional.of(target));
         when(templateService.reviewProposal(hr, 19L, 3L, false, "模板格式不符合要求"))
                 .thenReturn(template);
@@ -317,7 +331,7 @@ class EmploymentCertificateServiceTest {
         request.setLanguage(CertificateLanguage.ENGLISH);
         request.setDestinationCountry("法国");
         request.setConsulateName("法国签证中心");
-        when(requestRepository.findByIdAndTenantId(25L, 1L)).thenReturn(Optional.of(request));
+        when(requestRepository.lockForUpdate(25L, 1L)).thenReturn(Optional.of(request));
         when(userAccountRepository.findById(3L)).thenReturn(Optional.of(target));
         when(profileRepository.findByTenantIdAndEmployeeId(1L, 3L))
                 .thenReturn(Optional.of(readyProfile(target)));
@@ -348,7 +362,7 @@ class EmploymentCertificateServiceTest {
         request.setStatus(CertificateRequestStatus.APPROVED);
         request.setGenerationError("未找到模板");
         EmploymentCertificateTemplate template = template(9L, 1L);
-        when(requestRepository.findByIdAndTenantId(26L, 1L)).thenReturn(Optional.of(request));
+        when(requestRepository.lockForUpdate(26L, 1L)).thenReturn(Optional.of(request));
         when(userAccountRepository.findById(3L)).thenReturn(Optional.of(target));
         when(profileRepository.findByTenantIdAndEmployeeId(1L, 3L)).thenReturn(Optional.of(profile));
         when(templateRepository
@@ -382,7 +396,7 @@ class EmploymentCertificateServiceTest {
         UserAccount hr = employee(2L, 1L, Role.HR);
         UserAccount target = employee(3L, 1L, Role.EMPLOYEE);
         EmploymentCertificateRequest request = request(22L, 1L, 3L);
-        when(requestRepository.findByIdAndTenantId(22L, 1L)).thenReturn(Optional.of(request));
+        when(requestRepository.lockForUpdate(22L, 1L)).thenReturn(Optional.of(request));
         when(userAccountRepository.findById(3L)).thenReturn(Optional.of(target));
         when(profileRepository.findByTenantIdAndEmployeeId(1L, 3L)).thenReturn(Optional.empty());
 
@@ -409,7 +423,7 @@ class EmploymentCertificateServiceTest {
         ownRequest.setStatus(CertificateRequestStatus.GENERATED);
         ownRequest.setGeneratedFileName("在职证明-E003-31.docx");
         ownRequest.setGeneratedFileStorageKey("tenant-1/request-31/document.docx");
-        when(requestRepository.findByIdAndTenantId(31L, 1L)).thenReturn(Optional.of(ownRequest));
+        when(requestRepository.lockForUpdate(31L, 1L)).thenReturn(Optional.of(ownRequest));
         when(documentService.read("tenant-1/request-31/document.docx")).thenReturn(new byte[]{1, 2, 3});
 
         EmploymentCertificateService.DocumentDownload result = service.download(employee, 31L);
@@ -427,7 +441,7 @@ class EmploymentCertificateServiceTest {
         EmploymentCertificateRequest otherRequest = request(32L, 1L, 4L);
         otherRequest.setStatus(CertificateRequestStatus.GENERATED);
         otherRequest.setGeneratedFileStorageKey("tenant-1/request-32/document.docx");
-        when(requestRepository.findByIdAndTenantId(32L, 1L)).thenReturn(Optional.of(otherRequest));
+        when(requestRepository.lockForUpdate(32L, 1L)).thenReturn(Optional.of(otherRequest));
 
         assertThatThrownBy(() -> service.download(employee, 32L))
                 .isInstanceOf(AppException.class)

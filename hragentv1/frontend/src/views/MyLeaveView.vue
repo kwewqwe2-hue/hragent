@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h1>我的请假</h1>
-        <p>提交请假申请，系统会先校验余额并生成智能体辅助判断。</p>
+        <p>先核验实际工作日、可用余额和审批人，再确认提交申请。</p>
       </div>
     </div>
 
@@ -13,15 +13,15 @@
           <div class="toolbar-row">
             <strong>发起申请</strong>
           </div>
-          <el-alert
-            class="workday-alert"
-            type="info"
-            :closable="false"
-            title="系统按周一至周五自动计算请假天数，周六、周日不扣假期余额。"
-          />
+            <el-alert
+              class="workday-alert"
+              type="info"
+              :closable="false"
+              title="工作日、余额和重复日期均由服务端规则核验；页面估算不作为最终结果。"
+            />
           <el-form :model="form" label-position="top">
             <el-form-item label="请假类型">
-              <el-select v-model="form.leaveType" placeholder="选择假别" style="width: 100%">
+              <el-select v-model="form.leaveType" placeholder="选择假别" style="width: 100%" :disabled="submitting">
                 <el-option v-for="item in types" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
@@ -33,15 +33,32 @@
                 start-placeholder="开始日期"
                 end-placeholder="结束日期"
                 style="width: 100%"
+                :disabled="submitting"
               />
             </el-form-item>
-            <el-form-item label="计费天数（系统自动计算）">
+            <el-form-item label="计费天数（以核验结果为准）">
               <el-input-number v-model="form.days" :min="0" :step="1" disabled style="width: 100%" />
             </el-form-item>
             <el-form-item label="请假原因">
-              <el-input v-model="form.reason" type="textarea" :rows="4" maxlength="600" show-word-limit />
+              <el-input v-model="form.reason" type="textarea" :rows="4" maxlength="600" show-word-limit :disabled="submitting" />
             </el-form-item>
-            <el-button type="primary" :loading="submitting" @click="submit">提交申请</el-button>
+            <LeaveMedicalUpload v-if="form.leaveType === 'SICK'" :start-date="form.startDate" :end-date="form.endDate" :disabled="submitting" @ready="form.medicalRecordId = $event" @busy="medicalBusy = $event" />
+            <div v-if="preview" class="preview-card">
+              <div class="preview-heading">
+                <strong>提交前核验通过</strong>
+                <span>服务端实时结果</span>
+              </div>
+              <dl>
+                <div><dt>实际工作日</dt><dd>{{ preview.workingDays }} 天</dd></div>
+                <div><dt>可用余额</dt><dd>{{ preview.availableDaysBefore }} 天 -> {{ preview.availableDaysAfter }} 天</dd></div>
+                <div><dt>审批人</dt><dd>{{ preview.managerName }}（{{ preview.managerEmployeeNo }}）</dd></div>
+              </dl>
+              <p>确认提交后，申请将进入审批流程；最终天数和余额以审批备案结果为准。</p>
+            </div>
+            <div class="form-actions">
+              <el-button :loading="previewing" :disabled="submitting" @click="previewLeave">核验申请</el-button>
+              <el-button type="primary" :disabled="!preview || previewing || medicalBusy || (form.leaveType === 'SICK' && !form.medicalRecordId)" :loading="submitting" @click="submit">确认提交</el-button>
+            </div>
           </el-form>
         </section>
       </el-col>
@@ -50,9 +67,9 @@
         <section class="content-panel">
           <div class="toolbar-row">
             <strong>申请记录</strong>
-            <el-button :icon="Refresh" @click="load">刷新</el-button>
+            <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
           </div>
-          <el-table :data="requests" stripe>
+          <el-table v-loading="loading" :data="requests" stripe>
             <el-table-column type="expand">
               <template #default="{ row }">
                 <div class="expand-box">
@@ -62,6 +79,7 @@
                   <p><strong>依据：</strong>{{ row.aiEvidence }}</p>
                   <p v-if="row.managerOpinion"><strong>主管意见：</strong>{{ row.managerOpinion }}</p>
                   <p v-if="row.hrOpinion"><strong>HR 意见：</strong>{{ row.hrOpinion }}</p>
+                  <LeaveMedicalReview v-if="row.medicalRecordId" :id="row.id" />
                 </div>
               </template>
             </el-table-column>
@@ -83,17 +101,25 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getData, postData } from '../api/http'
-import type { LeaveRequest, LeaveType } from '../api/types'
+import type { LeavePreview, LeaveRequest, LeaveType } from '../api/types'
+import LeaveMedicalUpload from '../components/LeaveMedicalUpload.vue'
+import LeaveMedicalReview from '../components/LeaveMedicalReview.vue'
+const medicalBusy = ref(false)
 
 const types = ref<{ value: LeaveType; label: string }[]>([])
 const requests = ref<LeaveRequest[]>([])
 const dateRange = ref<[string, string] | null>(null)
 const submitting = ref(false)
+const previewing = ref(false)
+const loading = ref(false)
+const preview = ref<LeavePreview | null>(null)
+const previewFingerprint = ref('')
 const form = reactive({
+  medicalRecordId: null as number | null,
   leaveType: 'ANNUAL' as LeaveType,
   startDate: '',
   endDate: '',
@@ -104,23 +130,18 @@ const form = reactive({
 watch(dateRange, (value) => {
   form.startDate = value?.[0] || ''
   form.endDate = value?.[1] || ''
-  if (value) {
-    const workingDays = countWorkingDays(value[0], value[1])
-    form.days = workingDays
-  }
+  // The backend recomputes this field. Keep a valid placeholder until the
+  // preview response supplies the authoritative working-day count.
+  form.days = 1
 })
 
-function countWorkingDays(start: string, end: string) {
-  const cursor = new Date(`${start}T00:00:00`)
-  const last = new Date(`${end}T00:00:00`)
-  let count = 0
-  while (cursor <= last) {
-    const day = cursor.getDay()
-    if (day !== 0 && day !== 6) count += 1
-    cursor.setDate(cursor.getDate() + 1)
-  }
-  return count
-}
+watch(()=>form.leaveType,()=>{form.medicalRecordId=null})
+const fingerprint = computed(() => [form.leaveType, form.startDate, form.endDate, form.reason.trim(), form.medicalRecordId].join('|'))
+
+watch(fingerprint, () => {
+  preview.value = null
+  previewFingerprint.value = ''
+})
 
 function statusClass(status: string) {
   if (status === 'APPROVED') return 'approved'
@@ -129,20 +150,57 @@ function statusClass(status: string) {
 }
 
 async function load() {
-  types.value = await getData('/leave/types')
-  requests.value = await getData('/leave/my')
+  loading.value = true
+  try {
+    const [leaveTypes, leaveRequests] = await Promise.all([
+      getData<{ value: LeaveType; label: string }[]>('/leave/types'),
+      getData<LeaveRequest[]>('/leave/my')
+    ])
+    types.value = leaveTypes
+    requests.value = leaveRequests
+  } finally {
+    loading.value = false
+  }
+}
+
+function validateDraft() {
+  if (!form.startDate || !form.endDate || !form.reason.trim()) {
+    ElMessage.warning('请补全请假类型、日期和原因后再核验')
+    return false
+  }
+  if(form.leaveType === 'SICK' && !form.medicalRecordId){ElMessage.warning('请先上传病假材料完成初检');return false}
+  return true
+}
+
+async function previewLeave() {
+  if (!validateDraft()) return
+  previewing.value = true
+  try {
+    const result = await postData<LeavePreview>('/leave/preview', form)
+    preview.value = result
+    previewFingerprint.value = fingerprint.value
+    form.days = result.workingDays
+  } finally {
+    previewing.value = false
+  }
 }
 
 async function submit() {
-  if (!form.startDate || !form.endDate || !form.reason.trim()) {
-    ElMessage.warning('请补全请假类型、日期、天数和原因')
+  if (!validateDraft()) return
+  if (!preview.value || previewFingerprint.value !== fingerprint.value) {
+    ElMessage.warning('申请内容已变化，请重新核验后再提交')
     return
   }
   submitting.value = true
   try {
-    await postData('/leave', form)
-    ElMessage.success('申请已提交')
+    const result = await postData<LeaveRequest>('/leave', form)
+    ElMessage.success(`申请 #${result.id} 已提交，等待${result.managerName}审批`)
     form.reason = ''
+    form.medicalRecordId = null
+    dateRange.value = null
+    form.days = 1
+    preview.value = null
+    previewFingerprint.value = ''
     await load()
   } finally {
     submitting.value = false
@@ -165,5 +223,49 @@ onMounted(load)
 
 .workday-alert {
   margin-bottom: 14px;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.preview-card {
+  margin: 2px 0 16px;
+  padding: 14px;
+  color: #344054;
+  background: #f5fbf9;
+  border: 1px solid #b9dfd5;
+  border-radius: 6px;
+}
+
+.preview-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: #146b59;
+}
+
+.preview-heading span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.preview-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.preview-card dl div { min-width: 0; }
+.preview-card dt { color: #667085; font-size: 12px; }
+.preview-card dd { margin: 4px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.preview-card p { margin: 0; color: #667085; font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 560px) {
+  .preview-card dl { grid-template-columns: 1fr; }
 }
 </style>

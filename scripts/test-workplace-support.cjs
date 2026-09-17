@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path')
+;(async()=>{
+ const base='http://localhost:8080/api';const out='.artifacts/workplace-support';await fs.mkdir(out,{recursive:true})
+ const login=await fetch(base+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'zhangsan',password:'123456'})});const s=(await login.json()).data;assert.ok(s?.token)
+ const headers={'Content-Type':'application/json',Authorization:`Bearer ${s.token}`,'X-Workspace-Id':String(s.user.tenantId)}
+ async function ask(route,message){const r=await fetch(base+route,{method:'POST',headers,body:JSON.stringify({message})});const p=await r.json();assert.ok(r.ok&&p.success,p.message);return p.data}
+ const examples=[['怎么和主管进行沟通相关的工作安排？','优先级'],['事情太多做不完','取舍'],['最近工作压力有点大','拆小'],['和同事有矛盾怎么沟通','影响'],['刚入职很紧张，怎么融入团队','第一周'],['被批评后很委屈','表达的方式'],['太累了，不想上班','分工'],['晚上想到工作就睡不着','明天'],['只想倾诉，不想听建议','不急着找办法'],['他不同意怎么办','最在意的限制'],['我觉得自己抑郁了，能诊断吗','不能判断'],['怎么安排工作','完成标准'],['我今天很开心','享受这个时刻']]
+ const results=[]
+ for(const [q,fact]of examples){const chat=await ask('/web-chat/messages',q);assert.equal(chat.provider,'workplace-support',q);assert.ok(chat.answer.includes(fact),q);assert.ok(!chat.answer.includes('PDF第'),q);const policy=await ask('/employee-services/policy/ask',q);assert.equal(policy.status,'GUIDANCE',q);assert.equal(policy.answer,chat.answer,q);assert.deepEqual(policy.citations,[]);results.push({question:q,provider:chat.provider,passed:true})}
+ await fs.writeFile(out+'/api-results.json',JSON.stringify(results,null,2));console.log('13 support scenarios passed in Agent AI and policy entry')
+ const pw=require(path.join(process.env.USERPROFILE,'.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'));const browser=await pw.chromium.launch({channel:'msedge',headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000},locale:'zh-CN'});page.setDefaultTimeout(60000);const errors=[];page.on('pageerror',e=>errors.push(e.message))
+ try{
+  await page.goto('http://localhost:5173/login');await page.locator('input').nth(0).fill('zhangsan');await page.locator('input').nth(1).fill('123456');await page.getByRole('button',{name:'登录',exact:true}).click();await page.waitForURL(u=>!u.pathname.includes('login'))
+  await page.goto('http://localhost:5173/employee-experience?section=support');await page.getByLabel('想咨询的问题',{exact:true}).fill(examples[0][0]);await page.getByRole('button',{name:'发送咨询',exact:true}).click();await page.locator('.cw-answer').getByText('优先级',{exact:false}).waitFor();assert.ok(!(await page.locator('.cw-answer').innerText()).includes('PDF第'));await page.locator('.cw-answer').scrollIntoViewIfNeeded();await page.screenshot({path:out+'/manager-support.png',fullPage:true})
+  await page.getByLabel('想咨询的问题',{exact:true}).fill('最近工作压力有点大');await page.getByRole('button',{name:'发送咨询',exact:true}).click();await page.locator('.cw-answer').getByText('拆小',{exact:false}).waitFor();await page.setViewportSize({width:390,height:844});await page.screenshot({path:out+'/emotional-support-mobile.png',fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);assert.deepEqual(errors,[]);console.log('Original screenshot question and emotional support passed in the care page')
+ }finally{await browser.close()}
+})().catch(e=>{console.error(e);process.exitCode=1})

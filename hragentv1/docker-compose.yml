@@ -43,6 +43,7 @@ services:
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-local-demo-secret-change-me}
       APP_WEB_CHAT_IDENTITY_SECRET: ${HRAGENT_WEB_CHAT_IDENTITY_SECRET:-local-demo-web-chat-identity-secret}
+      WEB_CHAT_WORKFLOW_ENABLED: ${WEB_CHAT_WORKFLOW_ENABLED:-true}
       N8N_WEB_CHAT_WEBHOOK_URL: ${N8N_WEB_CHAT_WEBHOOK_URL:-http://hragent-n8n:5678/webhook/hragent-dingtalk-8a2d811d-0fe5-4198-8e61-288ec417fc04}
       N8N_WEB_ATTACHMENT_PARSE_URL: ${N8N_WEB_ATTACHMENT_PARSE_URL:-http://hragent-n8n:5678/webhook/hragent-web-attachment-parse}
       WEB_ATTACHMENT_INTERNAL_KEY: ${HRAGENT_WEB_ATTACHMENT_INTERNAL_KEY:-local-demo-web-attachment-internal-key-change-me}
@@ -52,6 +53,7 @@ services:
       CERTIFICATE_STORAGE_ROOT: /app/data/certificates
       CERTIFICATE_COMPANY_ADDRESS: ${CERTIFICATE_COMPANY_ADDRESS:-北京市海淀区中关村示例科技园 1 号}
       CERTIFICATE_COMPANY_CONTACT: ${CERTIFICATE_COMPANY_CONTACT:-010-88886666}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174}
     depends_on:
       mysql:
         condition: service_healthy

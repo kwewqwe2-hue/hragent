@@ -1,0 +1,27 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),ts=require('../hragentv1/frontend/node_modules/typescript');
+const cache={};function load(name){if(cache[name])return cache[name];const ctx={exports:{},URL,require:p=>load(p.replace('./',''))};vm.createContext(ctx);vm.runInContext(ts.transpileModule(fs.readFileSync('hragentv1/frontend/src/utils/'+name+'.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,ctx);return cache[name]=ctx.exports;}
+const {searchKnowledge}=load('knowledgeSearch'),{groupPolicies,policyDomain}=load('knowledgeTopics');
+const article=(id,title,content='',extra={})=>({id,title,content,source:'公司文件',category:'企业提供制度',region:'全国',reviewStatus:'APPROVED',...extra});
+const payroll=article(1,'关于财务支付审批权限的规定｜行政人事中心薪酬报账单','职工工资奖金、现金福利、社保公积金年金保险个税：审批行政人事中心负责人。');
+const annuity=article(2,'企业年金办法','第二条 企业年金是补充养老保险制度。',{category:'社保与公积金',source:'全国政策原文 · www.gov.cn'});
+const body=article(3,'福利细则','【企业年金】\n参与条件以方案为准。');
+const citation=article(4,'资料索引','相关依据：《企业年金办法》。');
+const gs=groupPolicies([payroll,annuity,body,citation]);
+assert.deepEqual(Array.from(searchKnowledge(gs,'年金'),m=>m.group.articles[0].id),[2,3]);
+assert.equal(searchKnowledge(groupPolicies([payroll]),'年金').length,0);
+const expanded=searchKnowledge(gs,'年金',true);assert.equal(expanded[0].group.articles[0].id,2);assert.equal(expanded.find(m=>m.group.articles[0].id===1).reason,'正文提及');
+assert.equal(searchKnowledge(groupPolicies([annuity]),'年金 报销').length,0);
+assert.equal(searchKnowledge(groupPolicies([annuity]),'上海 年金').length,0);
+assert.equal(searchKnowledge(groupPolicies([annuity]),'全国 年金').length,1);
+assert.equal(searchKnowledge(groupPolicies([article(5,'职工带薪年休假条例')]),'年假').length,1);
+assert.equal(searchKnowledge(groupPolicies([article(6,'社会保险法')]),'社保').length,1);
+assert.equal(searchKnowledge(groupPolicies([article(7,'出差管理规定','',{source:'CHR-XZ-24 A0 员工出差管理规定.pdf'})]),'ＣＨＲ－ＸＺ－２４').length,1);
+assert.equal(searchKnowledge(groupPolicies([article(8,'未知规则','年金报销',{source:'年金规则合集'})]),'年金').length,0);
+assert.equal(searchKnowledge(groupPolicies([article(9,'员工手册','【企业年金】\n正文\n【费用报销】'),article(10,'员工手册','【病假】\n正文')]),'年金 病假').length,0);
+assert.equal(searchKnowledge(gs,'   ').length,gs.length);
+assert.equal(searchKnowledge(gs,'不存在的词').length,0);
+console.log('PASS: incidental payroll/citation words excluded, explicit headings retained, full-text opt-in/ranking, all-term and same-article matching, synonyms, identifiers, blank query.');
+if(process.argv.includes('--live'))(async()=>{const b='http://localhost:5173/api',s=(await(await fetch(b+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'zhangsan',password:'123456'})})).json()).data;const e=await(await fetch(b+'/admin/knowledge',{headers:{Authorization:'Bearer '+s.token,'X-Workspace-Id':'1'}})).json();assert.ok(e.success);const all=e.data,company=groupPolicies(all.filter(a=>policyDomain(a)==='company')),pub=groupPolicies(all.filter(a=>policyDomain(a)==='public'));
+assert.ok(!searchKnowledge(company,'年金').some(m=>m.group.title.includes('薪酬报账单')));assert.ok(searchKnowledge(company,'年金',true).some(m=>m.group.title.includes('薪酬报账单')&&m.reason==='正文提及'));assert.ok(searchKnowledge(pub,'年金').some(m=>m.group.title==='企业年金办法'));
+assert.ok(searchKnowledge(company,'年假').length);assert.ok(searchKnowledge(pub,'报销').length);
+console.log(JSON.stringify({live:'PASS',companyAnnuity:searchKnowledge(company,'年金').map(m=>m.group.title),publicAnnuity:searchKnowledge(pub,'年金').map(m=>m.group.title)}));})().catch(e=>{console.error(e);process.exitCode=1});

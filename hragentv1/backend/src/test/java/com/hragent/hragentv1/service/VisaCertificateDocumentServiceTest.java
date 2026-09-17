@@ -89,8 +89,8 @@ class VisaCertificateDocumentServiceTest {
         assertThatThrownBy(() -> service.generate(
                 template("tenant-1/templates/unknown.docx"), request(), employee(), profile()
         )).isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("不支持的占位符")
-                .hasMessageContaining("{{unknownField}}");
+                .hasMessageContaining("请补充模板字段")
+                .hasMessageContaining("unknownField");
     }
 
     private void writeTemplate(Path path, boolean includeUnknown) throws Exception {

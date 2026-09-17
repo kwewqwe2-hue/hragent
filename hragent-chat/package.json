@@ -13,6 +13,8 @@
     "dompurify": "^3.2.6",
     "lucide-vue-next": "^0.468.0",
     "marked": "^15.0.12",
+    "survey-core": "3.0.3",
+    "survey-vue3-ui": "3.0.3",
     "vue": "^3.5.12"
   },
   "devDependencies": {

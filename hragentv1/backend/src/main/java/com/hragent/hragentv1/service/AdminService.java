@@ -240,7 +240,9 @@ public class AdminService {
 
     public List<KnowledgeArticle> knowledge(Long tenantId, boolean includeDrafts) {
         return knowledgeArticleRepository.findByTenantIdOrderByUpdatedAtDesc(tenantId).stream()
-                .filter(article -> includeDrafts || "APPROVED".equalsIgnoreCase(article.getReviewStatus()))
+                .filter(article -> includeDrafts || "APPROVED".equalsIgnoreCase(article.getReviewStatus())
+                        || ("REFERENCE".equals(article.getReviewStatus()) && article.getSource()!=null
+                            && article.getSource().startsWith("hrmanual.pdf · 政策主题摘编")))
                 .toList();
     }
 
@@ -343,7 +345,10 @@ public class AdminService {
         KnowledgeArticle article = knowledgeArticleRepository.findById(id)
                 .orElseThrow(() -> AppException.notFound("Knowledge article not found"));
         ensureTenant(article.getTenantId(), actor.getTenantId());
-        try {
+        // import-hrmanual.mjs creates these local reference fragments without uploading to n8n.
+        boolean localHandbook = "员工手册参考".equals(article.getCategory())
+                && article.getSource()!=null && article.getSource().startsWith("hrmanual.pdf · ");
+        if (!localHandbook) try {
             n8nClient.post()
                     .uri(n8nKnowledgeDeleteUri)
                     .contentType(MediaType.APPLICATION_JSON)
@@ -648,6 +653,17 @@ public class AdminService {
     }
 
     private void apply(KnowledgeArticle article, AdminDtos.KnowledgeUpsertRequest request) {
+        if (request.effectiveFrom() != null && request.effectiveTo() != null
+                && request.effectiveTo().isBefore(request.effectiveFrom())) {
+            throw AppException.badRequest("失效日期不能早于生效日期");
+        }
+        EmployeeServiceSupport.requireHttpUrl(request.sourceUrl());
+        article.setJobGrades(request.jobGrades());
+        article.setWorkTypes(request.workTypes());
+        article.setLegalEntities(request.legalEntities());
+        article.setSourceUrl(request.sourceUrl());
+        article.setEffectiveFrom(request.effectiveFrom());
+        article.setEffectiveTo(request.effectiveTo());
         article.setCategory(request.category());
         article.setTitle(request.title());
         article.setContent(request.content());

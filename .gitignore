@@ -20,6 +20,13 @@ n8nwork/knowledge-files/*
 **/uploads/
 *.log
 
+# Local process output
+/compose-start.err
+/compose-start.out
+/ollama-start*.err
+/ollama-start*.out
+/hragentv1/backend-build.exit
+
 # Editors and operating systems
 .idea/
 .vscode/
@@ -27,9 +34,16 @@ n8nwork/knowledge-files/*
 Thumbs.db
 desktop.ini
 
+# Finder launcher metadata
+*.command
+!启动员工关系智能体.command
+!scripts/start-hragent-demo-mac.command
+
 # Local backups and temporary files
 **/backups/
 **/.backups/
 **/tmp/
 *.bak
 *.local
+.artifacts/
+hragentv1/backend/src/test/resources/supplied-policies.json

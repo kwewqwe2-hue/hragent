@@ -1,0 +1,10 @@
+.employee-mobile-back { display: none; }
+@media (max-width: 760px) {
+  body:has(.employee-services) .shell > .sidebar { display: none; }
+  body:has(.employee-services) .shell > .el-container { min-width: 0; width: 100%; }
+  body:has(.employee-services) .main { padding: 0; }
+  body:has(.employee-services) .employee-services { width: 100%; min-width: 0; }
+  body:has(.employee-services) .er-care-message { padding: 20px; }
+  body:has(.employee-services) .employee-mobile-back { display: block; padding: 12px 16px; background: #fff; border-bottom: 1px solid #e0e8e2; }
+  .employee-mobile-back a { color: #257958; text-decoration: none; font: 14px/1.6 "Microsoft YaHei", sans-serif; }
+}

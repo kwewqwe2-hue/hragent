@@ -159,7 +159,17 @@ public class PolicyMonitorService {
         }
 
         if (request.decision() == PolicyReviewStatus.APPROVED) {
-            KnowledgeArticle article = publishKnowledge(actor, candidate);
+            if (candidate.getSourceId().startsWith("official-")) {
+                if(request.effectiveAt()!=null)candidate.setEffectiveAt(request.effectiveAt());
+                if(request.publishedAt()!=null)candidate.setPublishedAt(request.publishedAt());
+                if(trimToNull(request.region())!=null)candidate.setRegion(request.region().trim());
+                if(candidate.getEffectiveAt()==null||trimToNull(candidate.getRegion())==null)
+                    throw AppException.badRequest("请核实并填写生效日期、适用地区后再通过");
+                if(opinion==null)throw AppException.badRequest("请在审核意见中确认原文、附件及旧政策的废止关系");
+            }
+            if(request.effectiveTo()!=null && candidate.getEffectiveAt()!=null && request.effectiveTo().isBefore(candidate.getEffectiveAt()))
+                throw AppException.badRequest("有效截止日期不能早于生效日期");
+            KnowledgeArticle article = publishKnowledge(actor, candidate, request.effectiveTo());
             candidate.setKnowledgeArticleId(article.getId());
         }
         candidate.setReviewStatus(request.decision());
@@ -179,9 +189,20 @@ public class PolicyMonitorService {
         return view(saved);
     }
 
-    private KnowledgeArticle publishKnowledge(UserAccount actor, PolicyMonitorCandidate candidate) {
+    private KnowledgeArticle publishKnowledge(UserAccount actor, PolicyMonitorCandidate candidate, LocalDate effectiveTo) {
         String fileName = policyDocumentName(candidate);
-        knowledgeIndexClient.uploadText(fileName, indexContent(candidate));
+        // Official public policies are queried from the local knowledge repository.
+        if (!candidate.getSourceId().startsWith("official-")) knowledgeIndexClient.uploadText(fileName, indexContent(candidate));
+        if (candidate.getSourceId().startsWith("official-")) {
+            for(var previous:knowledgeArticleRepository.findByTenantIdOrderByUpdatedAtDesc(candidate.getTenantId())) {
+                if(java.util.Objects.equals(previous.getSourceUrl(),candidate.getSourceUrl()) && "APPROVED".equals(previous.getReviewStatus())) {
+                    if(previous.getEffectiveFrom()!=null && previous.getEffectiveFrom().isAfter(candidate.getEffectiveAt()))
+                        throw AppException.badRequest("已有更新生效版本，请先核对版本顺序");
+                    previous.setEffectiveTo(candidate.getEffectiveAt().minusDays(1));
+                    knowledgeArticleRepository.save(previous);
+                }
+            }
+        }
 
         KnowledgeArticle article = new KnowledgeArticle();
         article.setTenantId(candidate.getTenantId());
@@ -191,6 +212,9 @@ public class PolicyMonitorService {
         article.setSource(limit(candidate.getSourceName() + " | " + candidate.getSourceUrl(), 240));
         article.setRegion(candidate.getRegion() == null ? "全国" : candidate.getRegion());
         article.setPublishedAt(candidate.getPublishedAt());
+        article.setEffectiveFrom(candidate.getEffectiveAt());
+        article.setEffectiveTo(effectiveTo);
+        article.setSourceUrl(candidate.getSourceUrl());
         article.setUpdatedAt(candidate.getSourceUpdatedAt() == null
                 ? LocalDate.now()
                 : candidate.getSourceUpdatedAt().toLocalDate());
